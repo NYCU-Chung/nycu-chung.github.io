@@ -283,6 +283,16 @@ header h1 {
     transition: width 0.3s ease;
 }
 
+.progress-fill.indeterminate {
+    width: 30% !important;
+    animation: indeterminate 1.5s ease-in-out infinite;
+}
+
+@keyframes indeterminate {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(400%); }
+}
+
 .progress-text {
     font-weight: 500;
     margin-bottom: 0.25rem;

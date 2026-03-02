@@ -185,20 +185,26 @@ async function convert() {
     const fileSize = currentFile.size;
 
     xhr.upload.addEventListener('loadstart', () => {
+        elements.progressFill.classList.add('indeterminate');
         elements.progressText.textContent = '上傳中...';
-        elements.progressDetail.textContent = `0 / ${formatFileSize(fileSize)}`;
+        elements.progressDetail.textContent = `檔案大小: ${formatFileSize(fileSize)}`;
     });
 
     xhr.upload.addEventListener('progress', (e) => {
         const loaded = e.loaded || 0;
         const total = e.total || fileSize;
         const percent = total > 0 ? Math.round((loaded / total) * 100) : 0;
-        elements.progressFill.style.width = `${percent * 0.5}%`; // 上傳佔 50%
+
+        if (percent > 0) {
+            elements.progressFill.classList.remove('indeterminate');
+            elements.progressFill.style.width = `${percent * 0.5}%`;
+        }
         elements.progressText.textContent = `上傳中... ${percent}%`;
         elements.progressDetail.textContent = `${formatFileSize(loaded)} / ${formatFileSize(total)}`;
     });
 
     xhr.upload.addEventListener('loadend', () => {
+        elements.progressFill.classList.remove('indeterminate');
         elements.progressFill.style.width = '50%';
         elements.progressText.textContent = '處理中...';
         elements.progressDetail.textContent = '等待伺服器回應';
