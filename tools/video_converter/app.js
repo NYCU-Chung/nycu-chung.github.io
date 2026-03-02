@@ -281,7 +281,7 @@ function download() {
 function showProgress() {
     elements.progressSection.classList.remove('hidden');
     elements.progressFill.style.width = '0%';
-    elements.progressText.textContent = '準備中...';
+    elements.progressText.textContent = '上傳中... 0%';
     elements.progressDetail.textContent = '';
 }
 
