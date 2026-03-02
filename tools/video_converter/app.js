@@ -1,10 +1,7 @@
 /**
  * 影片/音訊轉換器
- * 使用 FFmpeg.wasm 0.12.x 在瀏覽器中進行轉換
+ * 使用 FFmpeg.wasm 0.9.8 在瀏覽器中進行轉換
  */
-
-import { FFmpeg } from 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/esm/index.js';
-import { fetchFile, toBlobURL } from 'https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/dist/esm/index.js';
 
 // 檔案大小閾值
 const SIZE_THRESHOLDS = {
@@ -73,36 +70,20 @@ const elements = {
 
 async function initFFmpeg() {
     try {
-        ffmpeg = new FFmpeg();
+        const { createFFmpeg, fetchFile } = window.FFmpeg;
+        window.fetchFileUtil = fetchFile;
 
-        ffmpeg.on('progress', ({ progress }) => {
-            const percent = Math.round(progress * 100);
+        ffmpeg = createFFmpeg({
+            log: true,
+        });
+
+        ffmpeg.setProgress(({ ratio }) => {
+            const percent = Math.round(ratio * 100);
             elements.progressFill.style.width = `${percent}%`;
             elements.progressText.textContent = `轉換中... ${percent}%`;
         });
 
-        ffmpeg.on('log', ({ message }) => {
-            console.log('FFmpeg:', message);
-        });
-
-        elements.loadingOverlay.querySelector('p').textContent = '正在載入 FFmpeg 核心...';
-        elements.loadingOverlay.querySelector('.loading-hint').textContent = '首次載入約需 10-20 秒...';
-
-        // FFmpeg 類別的 worker (解決 CORS 問題)
-        const ffmpegWorkerURL = await toBlobURL(
-            'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/esm/worker.js',
-            'text/javascript'
-        );
-
-        // 使用單執行緒版本 - 更穩定，載入更快
-        const baseURL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm';
-        await ffmpeg.load({
-            classWorkerURL: ffmpegWorkerURL,
-            coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-            wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
-        });
-        console.log('FFmpeg core loaded');
-
+        await ffmpeg.load();
         ffmpegLoaded = true;
         elements.loadingOverlay.classList.add('hidden');
         console.log('FFmpeg loaded successfully');
@@ -185,7 +166,6 @@ function handleFile(file) {
     // 大檔案自動設定解析度
     if (autoResolution && fileType === 'video') {
         elements.resolution.value = autoResolution;
-        // 同時降低品質以加速
         elements.quality.value = 'low';
     }
 
@@ -297,9 +277,7 @@ async function convert() {
         elements.progressText.textContent = '準備檔案...';
         elements.progressDetail.textContent = `讀取 ${formatFileSize(currentFile.size)}...`;
 
-        // 寫入輸入檔案
-        const fileData = await fetchFile(currentFile);
-        await ffmpeg.writeFile(inputName, fileData);
+        ffmpeg.FS('writeFile', inputName, await window.fetchFileUtil(currentFile));
 
         const args = buildFFmpegArgs(inputName, outputName, options);
         console.log('FFmpeg args:', args.join(' '));
@@ -307,15 +285,13 @@ async function convert() {
         elements.progressText.textContent = '轉換中... 0%';
         elements.progressDetail.textContent = options.isLargeFile ? '大檔案處理中，請耐心等待...' : '';
 
-        // 執行轉換
-        await ffmpeg.exec(args);
+        await ffmpeg.run(...args);
 
         elements.progressText.textContent = '讀取輸出...';
 
-        // 讀取輸出檔案
         let outputData;
         try {
-            outputData = await ffmpeg.readFile(outputName);
+            outputData = ffmpeg.FS('readFile', outputName);
         } catch (e) {
             throw new Error('轉換失敗：無法生成輸出檔案。可能是記憶體不足或格式不支援。');
         }
@@ -324,9 +300,9 @@ async function convert() {
             throw new Error('轉換失敗：輸出檔案為空');
         }
 
-        // 檢查輸出檔案大小是否合理（但對於降解析度的情況放寬限制）
+        // 檢查輸出檔案大小是否合理
         const isVideoOutput = FORMAT_CONFIG[options.format].type === 'video' && !options.extractAudio;
-        const minRatio = options.resolution ? 0.001 : 0.01; // 有降解析度時允許更小
+        const minRatio = options.resolution ? 0.001 : 0.01;
         if (isVideoOutput && outputData.length < currentFile.size * minRatio) {
             console.warn(`輸出檔案異常小: ${outputData.length} bytes (輸入: ${currentFile.size} bytes)`);
             throw new Error('轉換失敗：輸出檔案異常小，可能是記憶體不足或輸入格式不支援。建議使用桌面版 FFmpeg。');
@@ -349,11 +325,11 @@ async function convert() {
 
         outputBlob = new Blob([outputData.buffer], { type: mimeTypes[outputExt] || 'application/octet-stream' });
 
-        // 清理虛擬檔案系統以釋放記憶體
+        // 清理
         elements.progressText.textContent = '清理記憶體...';
         try {
-            await ffmpeg.deleteFile(inputName);
-            await ffmpeg.deleteFile(outputName);
+            ffmpeg.FS('unlink', inputName);
+            ffmpeg.FS('unlink', outputName);
         } catch (e) {
             console.warn('清理暫存檔案失敗:', e);
         }
@@ -365,13 +341,12 @@ async function convert() {
     } catch (error) {
         console.error('Conversion failed:', error);
 
-        // 嘗試清理記憶體
+        // 嘗試清理
         try {
-            await ffmpeg.deleteFile(inputName);
-            await ffmpeg.deleteFile(outputName);
+            ffmpeg.FS('unlink', inputName);
+            ffmpeg.FS('unlink', outputName);
         } catch (e) {}
 
-        // 更友善的錯誤訊息
         let errorMsg = error.message;
         if (errorMsg.includes('memory') || errorMsg.includes('OOM') || errorMsg.includes('out of')) {
             errorMsg = '記憶體不足。請嘗試：\n1. 選擇較低的解析度\n2. 使用較小的檔案\n3. 使用桌面版 FFmpeg';
