@@ -3,9 +3,6 @@
  * 使用 FFmpeg.wasm 在瀏覽器中進行轉換
  */
 
-import { FFmpeg } from 'https://esm.sh/@ffmpeg/ffmpeg@0.12.10?bundle-deps';
-import { fetchFile, toBlobURL } from 'https://esm.sh/@ffmpeg/util@0.12.1?bundle-deps';
-
 // 格式設定
 const FORMAT_CONFIG = {
     // 影片格式
@@ -67,31 +64,74 @@ const elements = {
     retryBtn: document.getElementById('retryBtn'),
 };
 
+// 將遠端 JS 轉為 Blob URL
+async function toBlobURL(url, mimeType) {
+    const response = await fetch(url);
+    const blob = new Blob([await response.text()], { type: mimeType });
+    return URL.createObjectURL(blob);
+}
+
+// 將遠端二進位檔轉為 Blob URL
+async function toBlobURLBinary(url, mimeType) {
+    const response = await fetch(url);
+    const blob = new Blob([await response.arrayBuffer()], { type: mimeType });
+    return URL.createObjectURL(blob);
+}
+
+// 讀取檔案為 Uint8Array
+async function fetchFile(file) {
+    return new Uint8Array(await file.arrayBuffer());
+}
+
 // 初始化 FFmpeg
 async function initFFmpeg() {
-    ffmpeg = new FFmpeg();
-
-    ffmpeg.on('log', ({ message }) => {
-        console.log('[FFmpeg]', message);
-    });
-
-    ffmpeg.on('progress', ({ progress, time }) => {
-        const percent = Math.round(progress * 100);
-        elements.progressFill.style.width = `${percent}%`;
-        elements.progressText.textContent = `轉換中... ${percent}%`;
-        if (time > 0) {
-            const seconds = Math.round(time / 1000000);
-            elements.progressDetail.textContent = `已處理: ${formatDuration(seconds)}`;
-        }
-    });
-
     try {
         const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
-        await ffmpeg.load({
-            coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-            wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
-            workerURL: await toBlobURL(`https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd/814.ffmpeg.js`, 'text/javascript'),
+        const ffmpegURL = 'https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd';
+
+        // 載入 FFmpeg 類別
+        const classWorkerURL = await toBlobURL(`${ffmpegURL}/814.ffmpeg.js`, 'text/javascript');
+        const classURL = await toBlobURL(`${ffmpegURL}/ffmpeg.js`, 'text/javascript');
+
+        // 動態載入 ffmpeg.js
+        await new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = classURL;
+            script.onload = resolve;
+            script.onerror = reject;
+            document.head.appendChild(script);
         });
+
+        // 等待 FFmpegWASM 可用
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        const { FFmpeg } = FFmpegWASM;
+        ffmpeg = new FFmpeg();
+
+        ffmpeg.on('log', ({ message }) => {
+            console.log('[FFmpeg]', message);
+        });
+
+        ffmpeg.on('progress', ({ progress, time }) => {
+            const percent = Math.round(progress * 100);
+            elements.progressFill.style.width = `${percent}%`;
+            elements.progressText.textContent = `轉換中... ${percent}%`;
+            if (time > 0) {
+                const seconds = Math.round(time / 1000000);
+                elements.progressDetail.textContent = `已處理: ${formatDuration(seconds)}`;
+            }
+        });
+
+        // 載入 core
+        const coreURL = await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript');
+        const wasmURL = await toBlobURLBinary(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm');
+
+        await ffmpeg.load({
+            coreURL,
+            wasmURL,
+            workerURL: classWorkerURL,
+        });
+
         elements.loadingOverlay.classList.add('hidden');
         console.log('FFmpeg loaded successfully');
     } catch (error) {
