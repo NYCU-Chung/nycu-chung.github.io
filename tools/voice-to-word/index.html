@@ -697,6 +697,54 @@
             }
         }
 
+        // 解碼音訊為 Float32Array (16kHz 單聲道)
+        async function decodeAudio(audioData) {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)({
+                sampleRate: 16000
+            });
+
+            try {
+                // 解碼音訊
+                const audioBuffer = await audioContext.decodeAudioData(audioData);
+
+                // 取得音訊數據
+                let audioArray;
+                if (audioBuffer.numberOfChannels === 1) {
+                    audioArray = audioBuffer.getChannelData(0);
+                } else {
+                    // 多聲道轉單聲道（取平均）
+                    const channels = [];
+                    for (let i = 0; i < audioBuffer.numberOfChannels; i++) {
+                        channels.push(audioBuffer.getChannelData(i));
+                    }
+                    audioArray = new Float32Array(channels[0].length);
+                    for (let i = 0; i < audioArray.length; i++) {
+                        let sum = 0;
+                        for (let ch = 0; ch < channels.length; ch++) {
+                            sum += channels[ch][i];
+                        }
+                        audioArray[i] = sum / channels.length;
+                    }
+                }
+
+                // 如果採樣率不是 16kHz，需要重新採樣
+                if (audioBuffer.sampleRate !== 16000) {
+                    const ratio = audioBuffer.sampleRate / 16000;
+                    const newLength = Math.round(audioArray.length / ratio);
+                    const resampled = new Float32Array(newLength);
+                    for (let i = 0; i < newLength; i++) {
+                        const srcIndex = Math.floor(i * ratio);
+                        resampled[i] = audioArray[srcIndex];
+                    }
+                    return resampled;
+                }
+
+                return audioArray;
+            } finally {
+                await audioContext.close();
+            }
+        }
+
         // 轉寫音訊
         async function transcribeAudio(audioBlob) {
             progressContainer.classList.add('visible');
@@ -708,12 +756,17 @@
                 // 初始化 transcriber
                 const transcriber = await initTranscriber();
 
+                progressText.textContent = '正在解碼音訊...';
+                progressPercent.textContent = '25%';
+                progressFill.style.width = '25%';
+
+                // 將 Blob 轉換為 ArrayBuffer 並解碼
+                const arrayBuffer = await audioBlob.arrayBuffer();
+                const audioData = await decodeAudio(arrayBuffer);
+
                 progressText.textContent = '正在轉寫...';
                 progressPercent.textContent = '50%';
                 progressFill.style.width = '50%';
-
-                // 將 Blob 轉換為 ArrayBuffer
-                const arrayBuffer = await audioBlob.arrayBuffer();
 
                 // 取得語言設定
                 const language = languageSelect.value;
@@ -733,7 +786,7 @@
                 progressFill.style.width = '75%';
 
                 // 進行轉寫
-                const result = await transcriber(arrayBuffer, options);
+                const result = await transcriber(audioData, options);
 
                 progressPercent.textContent = '100%';
                 progressFill.style.width = '100%';
