@@ -179,14 +179,26 @@ async function convert() {
 
     // 使用 XMLHttpRequest 以支援上傳進度
     const xhr = new XMLHttpRequest();
+    const fileSize = currentFile.size;
+
+    xhr.upload.addEventListener('loadstart', () => {
+        elements.progressText.textContent = '上傳中...';
+        elements.progressDetail.textContent = `0 / ${formatFileSize(fileSize)}`;
+    });
 
     xhr.upload.addEventListener('progress', (e) => {
-        if (e.lengthComputable) {
-            const percent = Math.round((e.loaded / e.total) * 100);
-            elements.progressFill.style.width = `${percent * 0.5}%`; // 上傳佔 50%
-            elements.progressText.textContent = `上傳中... ${percent}%`;
-            elements.progressDetail.textContent = `${formatFileSize(e.loaded)} / ${formatFileSize(e.total)}`;
-        }
+        const loaded = e.loaded || 0;
+        const total = e.total || fileSize;
+        const percent = total > 0 ? Math.round((loaded / total) * 100) : 0;
+        elements.progressFill.style.width = `${percent * 0.5}%`; // 上傳佔 50%
+        elements.progressText.textContent = `上傳中... ${percent}%`;
+        elements.progressDetail.textContent = `${formatFileSize(loaded)} / ${formatFileSize(total)}`;
+    });
+
+    xhr.upload.addEventListener('loadend', () => {
+        elements.progressFill.style.width = '50%';
+        elements.progressText.textContent = '處理中...';
+        elements.progressDetail.textContent = '等待伺服器回應';
     });
 
     xhr.addEventListener('load', () => {
