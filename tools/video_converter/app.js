@@ -1,9 +1,11 @@
 /**
  * 影片/音訊轉換器
- * 使用 FFmpeg.wasm 在瀏覽器中進行轉換
+ * 使用 FFmpeg.wasm 在瀏覽器中進行轉換 (單線程版本)
  */
 
-// 格式設定
+import { FFmpeg } from 'https://esm.sh/@ffmpeg/ffmpeg@0.12.10';
+import { fetchFile } from 'https://esm.sh/@ffmpeg/util@0.12.1';
+
 const FORMAT_CONFIG = {
     mp4: { type: 'video', ext: 'mp4' },
     webm: { type: 'video', ext: 'webm' },
@@ -29,7 +31,6 @@ let ffmpeg = null;
 let currentFile = null;
 let outputBlob = null;
 let outputFileName = null;
-let ffmpegLoaded = false;
 
 const elements = {
     loadingOverlay: document.getElementById('loadingOverlay'),
@@ -70,21 +71,33 @@ async function toBlobURL(url, mimeType) {
 
 async function initFFmpeg() {
     try {
-        const { createFFmpeg, fetchFile: ff } = FFmpeg;
-        window.fetchFileUtil = ff;
+        ffmpeg = new FFmpeg();
 
-        ffmpeg = createFFmpeg({
-            log: true,
+        ffmpeg.on('log', ({ message }) => {
+            console.log('[FFmpeg]', message);
         });
 
-        ffmpeg.setProgress(({ ratio }) => {
-            const percent = Math.round(ratio * 100);
+        ffmpeg.on('progress', ({ progress }) => {
+            const percent = Math.round(progress * 100);
             elements.progressFill.style.width = `${percent}%`;
             elements.progressText.textContent = `轉換中... ${percent}%`;
         });
 
-        await ffmpeg.load();
-        ffmpegLoaded = true;
+        // 使用單線程版本的 core (不需要 SharedArrayBuffer)
+        const coreURL = await toBlobURL(
+            'https://unpkg.com/@ffmpeg/core-st@0.12.6/dist/esm/ffmpeg-core.js',
+            'text/javascript'
+        );
+        const wasmURL = await toBlobURL(
+            'https://unpkg.com/@ffmpeg/core-st@0.12.6/dist/esm/ffmpeg-core.wasm',
+            'application/wasm'
+        );
+
+        await ffmpeg.load({
+            coreURL,
+            wasmURL,
+        });
+
         elements.loadingOverlay.classList.add('hidden');
         console.log('FFmpeg loaded successfully');
     } catch (error) {
@@ -208,7 +221,7 @@ function buildFFmpegArgs(inputName, outputName, options) {
 }
 
 async function convert() {
-    if (!currentFile || !ffmpegLoaded) return;
+    if (!currentFile || !ffmpeg) return;
 
     const options = {
         format: elements.outputFormat.value,
@@ -237,16 +250,16 @@ async function convert() {
 
     try {
         elements.progressText.textContent = '準備檔案...';
-        ffmpeg.FS('writeFile', inputName, await window.fetchFileUtil(currentFile));
+        await ffmpeg.writeFile(inputName, await fetchFile(currentFile));
 
         const args = buildFFmpegArgs(inputName, outputName, options);
         console.log('FFmpeg args:', args.join(' '));
 
         elements.progressText.textContent = '轉換中... 0%';
-        await ffmpeg.run(...args);
+        await ffmpeg.exec(args);
 
         elements.progressText.textContent = '完成處理...';
-        const outputData = ffmpeg.FS('readFile', outputName);
+        const outputData = await ffmpeg.readFile(outputName);
 
         const mimeTypes = {
             mp4: 'video/mp4',
@@ -265,8 +278,8 @@ async function convert() {
 
         outputBlob = new Blob([outputData.buffer], { type: mimeTypes[outputExt] || 'application/octet-stream' });
 
-        ffmpeg.FS('unlink', inputName);
-        ffmpeg.FS('unlink', outputName);
+        await ffmpeg.deleteFile(inputName);
+        await ffmpeg.deleteFile(outputName);
 
         showDownload();
     } catch (error) {
