@@ -3,8 +3,8 @@
  * 使用 FFmpeg.wasm 在瀏覽器中進行轉換
  */
 
-const { FFmpeg } = FFmpegWASM;
-const { fetchFile, toBlobURL } = FFmpegUtil;
+import { FFmpeg } from 'https://esm.sh/@ffmpeg/ffmpeg@0.12.10';
+import { fetchFile, toBlobURL } from 'https://esm.sh/@ffmpeg/util@0.12.1';
 
 // 格式設定
 const FORMAT_CONFIG = {
