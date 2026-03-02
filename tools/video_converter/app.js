@@ -1,7 +1,10 @@
 /**
  * 影片/音訊轉換器
- * 使用 FFmpeg.wasm 在瀏覽器中進行轉換
+ * 使用 FFmpeg.wasm 0.12.x 在瀏覽器中進行轉換
  */
+
+import { FFmpeg } from 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/esm/index.js';
+import { fetchFile, toBlobURL } from 'https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/dist/esm/index.js';
 
 const FORMAT_CONFIG = {
     mp4: { type: 'video', ext: 'mp4', vcodec: 'libx264', acodec: 'aac' },
@@ -18,7 +21,6 @@ const FORMAT_CONFIG = {
     m4a: { type: 'audio', ext: 'm4a', acodec: 'aac' },
 };
 
-// 優化速度：使用更快的 preset
 const QUALITY_SETTINGS = {
     high: { crf: '23', preset: 'fast', audioBitrate: '192k' },
     medium: { crf: '28', preset: 'veryfast', audioBitrate: '128k' },
@@ -63,20 +65,27 @@ const elements = {
 
 async function initFFmpeg() {
     try {
-        const { createFFmpeg, fetchFile: ff } = window.FFmpeg;
-        window.fetchFileUtil = ff;
+        ffmpeg = new FFmpeg();
 
-        ffmpeg = createFFmpeg({
-            log: true,
-        });
-
-        ffmpeg.setProgress(({ ratio }) => {
-            const percent = Math.round(ratio * 100);
+        ffmpeg.on('progress', ({ progress }) => {
+            const percent = Math.round(progress * 100);
             elements.progressFill.style.width = `${percent}%`;
             elements.progressText.textContent = `轉換中... ${percent}%`;
         });
 
-        await ffmpeg.load();
+        ffmpeg.on('log', ({ message }) => {
+            console.log('FFmpeg:', message);
+        });
+
+        elements.loadingOverlay.querySelector('p').textContent = '正在載入 FFmpeg 核心...';
+
+        // 載入 FFmpeg 核心 - 使用單執行緒版本以提高相容性
+        const baseURL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm';
+        await ffmpeg.load({
+            coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+            wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+        });
+
         ffmpegLoaded = true;
         elements.loadingOverlay.classList.add('hidden');
         console.log('FFmpeg loaded successfully');
@@ -162,20 +171,16 @@ function buildFFmpegArgs(inputName, outputName, options) {
     const isExtractAudio = options.extractAudio;
 
     if (isOutputAudio || isExtractAudio) {
-        // 音訊輸出
-        args.push('-vn'); // 移除視訊
-
+        args.push('-vn');
         if (formatConfig.acodec) {
             args.push('-c:a', formatConfig.acodec);
         }
-
         if (options.audioBitrate) {
             args.push('-b:a', options.audioBitrate);
         } else {
             args.push('-b:a', qualityConfig.audioBitrate);
         }
     } else if (options.format === 'gif') {
-        // GIF 特殊處理
         let scale = '480:-1';
         if (options.resolution) {
             const [w] = options.resolution.split('x');
@@ -185,15 +190,12 @@ function buildFFmpegArgs(inputName, outputName, options) {
         args.push('-vf', `fps=${fps},scale=${scale}:flags=lanczos`);
         args.push('-loop', '0');
     } else {
-        // 視訊輸出 - 簡化參數以確保相容性
         args.push('-c:v', formatConfig.vcodec);
         args.push('-c:a', formatConfig.acodec);
 
-        // 使用 CRF 和 preset（移除可能造成問題的參數）
         if (formatConfig.vcodec === 'libx264') {
             args.push('-crf', qualityConfig.crf);
             args.push('-preset', qualityConfig.preset);
-            // 確保 H.264 相容性
             args.push('-pix_fmt', 'yuv420p');
             args.push('-profile:v', 'baseline');
             args.push('-level', '3.0');
@@ -204,15 +206,12 @@ function buildFFmpegArgs(inputName, outputName, options) {
             args.push('-q:v', '5');
         }
 
-        // 音訊位元率
         args.push('-b:a', options.audioBitrate || qualityConfig.audioBitrate);
 
-        // 解析度
         if (options.resolution) {
             args.push('-s', options.resolution);
         }
 
-        // 幀率
         if (options.fps) {
             args.push('-r', options.fps);
         }
@@ -254,20 +253,24 @@ async function convert() {
 
     try {
         elements.progressText.textContent = '準備檔案...';
-        ffmpeg.FS('writeFile', inputName, await window.fetchFileUtil(currentFile));
+
+        // 寫入輸入檔案
+        await ffmpeg.writeFile(inputName, await fetchFile(currentFile));
 
         const args = buildFFmpegArgs(inputName, outputName, options);
         console.log('FFmpeg args:', args.join(' '));
 
         elements.progressText.textContent = '轉換中... 0%';
-        await ffmpeg.run(...args);
+
+        // 執行轉換
+        await ffmpeg.exec(args);
 
         elements.progressText.textContent = '完成處理...';
 
-        // 檢查輸出檔案是否存在
+        // 讀取輸出檔案
         let outputData;
         try {
-            outputData = ffmpeg.FS('readFile', outputName);
+            outputData = await ffmpeg.readFile(outputName);
         } catch (e) {
             throw new Error('轉換失敗：無法生成輸出檔案');
         }
@@ -276,7 +279,7 @@ async function convert() {
             throw new Error('轉換失敗：輸出檔案為空');
         }
 
-        // 檢查輸出檔案大小是否合理（視訊輸出不應小於輸入的 1%）
+        // 檢查輸出檔案大小是否合理
         const isVideoOutput = FORMAT_CONFIG[options.format].type === 'video' && !options.extractAudio;
         if (isVideoOutput && outputData.length < currentFile.size * 0.01) {
             console.warn(`輸出檔案異常小: ${outputData.length} bytes (輸入: ${currentFile.size} bytes)`);
@@ -300,10 +303,10 @@ async function convert() {
 
         outputBlob = new Blob([outputData.buffer], { type: mimeTypes[outputExt] || 'application/octet-stream' });
 
-        // 清理
+        // 清理虛擬檔案系統
         try {
-            ffmpeg.FS('unlink', inputName);
-            ffmpeg.FS('unlink', outputName);
+            await ffmpeg.deleteFile(inputName);
+            await ffmpeg.deleteFile(outputName);
         } catch (e) {
             console.warn('清理暫存檔案失敗:', e);
         }
