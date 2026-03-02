@@ -7,8 +7,7 @@
 const API_BASE = 'https://video-converter.duckdns.org';
 
 const SIZE_THRESHOLDS = {
-    WARN: 100 * 1024 * 1024,      // 100MB
-    MAX: 500 * 1024 * 1024,        // 500MB
+    WARN: 200 * 1024 * 1024,      // 200MB 以上提醒
 };
 
 const FORMAT_CONFIG = {
@@ -107,11 +106,6 @@ function handleFile(file) {
     }
 
     const sizeMB = (file.size / (1024 * 1024)).toFixed(0);
-
-    if (file.size > SIZE_THRESHOLDS.MAX) {
-        showError(`檔案大小 ${sizeMB}MB 超過上限 (500MB)`);
-        return;
-    }
 
     if (file.size > SIZE_THRESHOLDS.WARN) {
         if (!confirm(`檔案大小 ${sizeMB}MB，上傳和轉換可能需要較長時間。\n\n確定要繼續嗎？`)) {
