@@ -6,6 +6,14 @@
 import { FFmpeg } from 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/esm/index.js';
 import { fetchFile, toBlobURL } from 'https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/dist/esm/index.js';
 
+// 檔案大小閾值
+const SIZE_THRESHOLDS = {
+    WARN: 100 * 1024 * 1024,      // 100MB - 警告
+    FORCE_720P: 200 * 1024 * 1024, // 200MB - 強制 720p
+    FORCE_480P: 400 * 1024 * 1024, // 400MB - 強制 480p
+    MAX: 800 * 1024 * 1024,        // 800MB - 最大限制
+};
+
 const FORMAT_CONFIG = {
     mp4: { type: 'video', ext: 'mp4', vcodec: 'libx264', acodec: 'aac' },
     webm: { type: 'video', ext: 'webm', vcodec: 'libvpx', acodec: 'libvorbis' },
@@ -79,16 +87,32 @@ async function initFFmpeg() {
 
         elements.loadingOverlay.querySelector('p').textContent = '正在載入 FFmpeg 核心...';
 
-        // 載入 FFmpeg 核心 - 使用單執行緒版本以提高相容性
-        const baseURL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm';
-        await ffmpeg.load({
-            coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-            wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
-        });
+        // 檢查是否支援多執行緒 (需要 SharedArrayBuffer)
+        const multiThreadSupported = typeof SharedArrayBuffer !== 'undefined';
+        console.log('Multi-thread support:', multiThreadSupported);
+
+        if (multiThreadSupported) {
+            // 使用多執行緒版本 - 更好的效能和記憶體管理
+            const baseURL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core-mt@0.12.6/dist/esm';
+            elements.loadingOverlay.querySelector('.loading-hint').textContent = '載入多執行緒核心...';
+            await ffmpeg.load({
+                coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+                wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+                workerURL: await toBlobURL(`${baseURL}/ffmpeg-core.worker.js`, 'text/javascript'),
+            });
+        } else {
+            // 使用單執行緒版本
+            const baseURL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm';
+            elements.loadingOverlay.querySelector('.loading-hint').textContent = '載入單執行緒核心...';
+            await ffmpeg.load({
+                coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+                wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+            });
+        }
 
         ffmpegLoaded = true;
         elements.loadingOverlay.classList.add('hidden');
-        console.log('FFmpeg loaded successfully');
+        console.log('FFmpeg loaded successfully (multi-thread:', multiThreadSupported, ')');
     } catch (error) {
         console.error('Failed to load FFmpeg:', error);
         elements.loadingOverlay.innerHTML = `
@@ -126,11 +150,28 @@ function handleFile(file) {
         return;
     }
 
-    // 檢查檔案大小 - 超過 100MB 警告
-    const MAX_SIZE_MB = 100;
-    if (file.size > MAX_SIZE_MB * 1024 * 1024) {
-        const sizeMB = (file.size / (1024 * 1024)).toFixed(0);
-        if (!confirm(`檔案大小 ${sizeMB}MB 超過 ${MAX_SIZE_MB}MB，瀏覽器轉換可能會失敗或很慢。\n\n建議使用桌面版 FFmpeg 處理大檔案。\n\n確定要繼續嗎？`)) {
+    const sizeMB = (file.size / (1024 * 1024)).toFixed(0);
+
+    // 檢查檔案大小限制
+    if (file.size > SIZE_THRESHOLDS.MAX) {
+        showError(`檔案大小 ${sizeMB}MB 超過上限 (800MB)。\n\n請使用桌面版 FFmpeg 處理超大檔案。`);
+        return;
+    }
+
+    // 大檔案警告和自動調整
+    let autoResolution = '';
+    if (file.size > SIZE_THRESHOLDS.FORCE_480P) {
+        if (!confirm(`檔案大小 ${sizeMB}MB，將自動降低至 480p 以節省記憶體。\n\n轉換可能需要較長時間，建議使用桌面版。\n\n確定要繼續嗎？`)) {
+            return;
+        }
+        autoResolution = '854x480';
+    } else if (file.size > SIZE_THRESHOLDS.FORCE_720P) {
+        if (!confirm(`檔案大小 ${sizeMB}MB，將自動降低至 720p 以節省記憶體。\n\n確定要繼續嗎？`)) {
+            return;
+        }
+        autoResolution = '1280x720';
+    } else if (file.size > SIZE_THRESHOLDS.WARN) {
+        if (!confirm(`檔案大小 ${sizeMB}MB，瀏覽器轉換可能較慢。\n\n建議使用桌面版 FFmpeg 處理大檔案。\n\n確定要繼續嗎？`)) {
             return;
         }
     }
@@ -146,6 +187,13 @@ function handleFile(file) {
 
     if (fileType === 'audio') {
         elements.outputFormat.value = 'mp3';
+    }
+
+    // 大檔案自動設定解析度
+    if (autoResolution && fileType === 'video') {
+        elements.resolution.value = autoResolution;
+        // 同時降低品質以加速
+        elements.quality.value = 'low';
     }
 
     hideError();
@@ -231,6 +279,7 @@ async function convert() {
         fps: elements.fps.value,
         audioBitrate: elements.audioBitrate.value,
         extractAudio: elements.extractAudio.checked,
+        isLargeFile: currentFile.size > SIZE_THRESHOLDS.WARN,
     };
 
     if (options.extractAudio && FORMAT_CONFIG[options.format].type === 'video') {
@@ -253,37 +302,41 @@ async function convert() {
 
     try {
         elements.progressText.textContent = '準備檔案...';
+        elements.progressDetail.textContent = `讀取 ${formatFileSize(currentFile.size)}...`;
 
         // 寫入輸入檔案
-        await ffmpeg.writeFile(inputName, await fetchFile(currentFile));
+        const fileData = await fetchFile(currentFile);
+        await ffmpeg.writeFile(inputName, fileData);
 
         const args = buildFFmpegArgs(inputName, outputName, options);
         console.log('FFmpeg args:', args.join(' '));
 
         elements.progressText.textContent = '轉換中... 0%';
+        elements.progressDetail.textContent = options.isLargeFile ? '大檔案處理中，請耐心等待...' : '';
 
         // 執行轉換
         await ffmpeg.exec(args);
 
-        elements.progressText.textContent = '完成處理...';
+        elements.progressText.textContent = '讀取輸出...';
 
         // 讀取輸出檔案
         let outputData;
         try {
             outputData = await ffmpeg.readFile(outputName);
         } catch (e) {
-            throw new Error('轉換失敗：無法生成輸出檔案');
+            throw new Error('轉換失敗：無法生成輸出檔案。可能是記憶體不足或格式不支援。');
         }
 
         if (outputData.length === 0) {
             throw new Error('轉換失敗：輸出檔案為空');
         }
 
-        // 檢查輸出檔案大小是否合理
+        // 檢查輸出檔案大小是否合理（但對於降解析度的情況放寬限制）
         const isVideoOutput = FORMAT_CONFIG[options.format].type === 'video' && !options.extractAudio;
-        if (isVideoOutput && outputData.length < currentFile.size * 0.01) {
+        const minRatio = options.resolution ? 0.001 : 0.01; // 有降解析度時允許更小
+        if (isVideoOutput && outputData.length < currentFile.size * minRatio) {
             console.warn(`輸出檔案異常小: ${outputData.length} bytes (輸入: ${currentFile.size} bytes)`);
-            throw new Error('轉換失敗：輸出檔案異常小，可能是記憶體不足。建議使用桌面版 FFmpeg。');
+            throw new Error('轉換失敗：輸出檔案異常小，可能是記憶體不足或輸入格式不支援。建議使用桌面版 FFmpeg。');
         }
 
         const mimeTypes = {
@@ -303,7 +356,8 @@ async function convert() {
 
         outputBlob = new Blob([outputData.buffer], { type: mimeTypes[outputExt] || 'application/octet-stream' });
 
-        // 清理虛擬檔案系統
+        // 清理虛擬檔案系統以釋放記憶體
+        elements.progressText.textContent = '清理記憶體...';
         try {
             await ffmpeg.deleteFile(inputName);
             await ffmpeg.deleteFile(outputName);
@@ -317,7 +371,19 @@ async function convert() {
         showDownload();
     } catch (error) {
         console.error('Conversion failed:', error);
-        showError(`轉換失敗: ${error.message}`);
+
+        // 嘗試清理記憶體
+        try {
+            await ffmpeg.deleteFile(inputName);
+            await ffmpeg.deleteFile(outputName);
+        } catch (e) {}
+
+        // 更友善的錯誤訊息
+        let errorMsg = error.message;
+        if (errorMsg.includes('memory') || errorMsg.includes('OOM') || errorMsg.includes('out of')) {
+            errorMsg = '記憶體不足。請嘗試：\n1. 選擇較低的解析度\n2. 使用較小的檔案\n3. 使用桌面版 FFmpeg';
+        }
+        showError(`轉換失敗: ${errorMsg}`);
     } finally {
         elements.convertBtn.disabled = false;
         elements.convertBtn.querySelector('.btn-text').classList.remove('hidden');
