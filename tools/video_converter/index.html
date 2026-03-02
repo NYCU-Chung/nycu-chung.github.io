@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>影片/音訊轉換器</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>影片/音訊轉換器</h1>
+            <p class="subtitle">支援常見格式互轉，完全在瀏覽器中運行</p>
+        </header>
+
+        <main>
+            <!-- 上傳區域 -->
+            <div class="upload-section">
+                <div class="dropzone" id="dropzone">
+                    <div class="dropzone-content">
+                        <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="17 8 12 3 7 8"/>
+                            <line x1="12" y1="3" x2="12" y2="15"/>
+                        </svg>
+                        <p>拖放檔案到此處</p>
+                        <p class="hint">或點擊選擇檔案</p>
+                        <input type="file" id="fileInput" accept="video/*,audio/*" hidden>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 檔案資訊 -->
+            <div class="file-info hidden" id="fileInfo">
+                <div class="file-card">
+                    <div class="file-icon" id="fileIcon">📹</div>
+                    <div class="file-details">
+                        <p class="file-name" id="fileName">-</p>
+                        <p class="file-meta" id="fileMeta">-</p>
+                    </div>
+                    <button class="btn-remove" id="removeFile" title="移除檔案">✕</button>
+                </div>
+            </div>
+
+            <!-- 轉換選項 -->
+            <div class="convert-section hidden" id="convertSection">
+                <div class="options-grid">
+                    <div class="option-group">
+                        <label for="outputFormat">輸出格式</label>
+                        <select id="outputFormat">
+                            <optgroup label="影片格式">
+                                <option value="mp4">MP4</option>
+                                <option value="webm">WebM</option>
+                                <option value="avi">AVI</option>
+                                <option value="mkv">MKV</option>
+                                <option value="mov">MOV</option>
+                                <option value="gif">GIF</option>
+                            </optgroup>
+                            <optgroup label="音訊格式">
+                                <option value="mp3">MP3</option>
+                                <option value="wav">WAV</option>
+                                <option value="aac">AAC</option>
+                                <option value="ogg">OGG</option>
+                                <option value="flac">FLAC</option>
+                                <option value="m4a">M4A</option>
+                            </optgroup>
+                        </select>
+                    </div>
+
+                    <div class="option-group">
+                        <label for="quality">品質</label>
+                        <select id="quality">
+                            <option value="high">高品質</option>
+                            <option value="medium" selected>標準</option>
+                            <option value="low">低品質 (較小檔案)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- 進階選項 -->
+                <details class="advanced-options">
+                    <summary>進階選項</summary>
+                    <div class="options-grid">
+                        <div class="option-group">
+                            <label for="resolution">解析度</label>
+                            <select id="resolution">
+                                <option value="">保持原始</option>
+                                <option value="1920x1080">1080p (1920×1080)</option>
+                                <option value="1280x720">720p (1280×720)</option>
+                                <option value="854x480">480p (854×480)</option>
+                                <option value="640x360">360p (640×360)</option>
+                            </select>
+                        </div>
+
+                        <div class="option-group">
+                            <label for="fps">幀率 (FPS)</label>
+                            <select id="fps">
+                                <option value="">保持原始</option>
+                                <option value="60">60 fps</option>
+                                <option value="30">30 fps</option>
+                                <option value="24">24 fps</option>
+                                <option value="15">15 fps</option>
+                            </select>
+                        </div>
+
+                        <div class="option-group">
+                            <label for="audioBitrate">音訊位元率</label>
+                            <select id="audioBitrate">
+                                <option value="">自動</option>
+                                <option value="320k">320 kbps</option>
+                                <option value="256k">256 kbps</option>
+                                <option value="192k">192 kbps</option>
+                                <option value="128k">128 kbps</option>
+                            </select>
+                        </div>
+
+                        <div class="option-group">
+                            <label for="extractAudio">
+                                <input type="checkbox" id="extractAudio">
+                                僅提取音訊
+                            </label>
+                        </div>
+                    </div>
+                </details>
+
+                <button class="btn-convert" id="convertBtn">
+                    <span class="btn-text">開始轉換</span>
+                    <span class="btn-loading hidden">
+                        <span class="spinner"></span>
+                        轉換中...
+                    </span>
+                </button>
+            </div>
+
+            <!-- 進度條 -->
+            <div class="progress-section hidden" id="progressSection">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+                <p class="progress-text" id="progressText">準備中...</p>
+                <p class="progress-detail" id="progressDetail"></p>
+            </div>
+
+            <!-- 下載區域 -->
+            <div class="download-section hidden" id="downloadSection">
+                <div class="success-icon">✓</div>
+                <h3>轉換完成！</h3>
+                <p class="output-info" id="outputInfo">-</p>
+                <button class="btn-download" id="downloadBtn">下載檔案</button>
+                <button class="btn-new" id="newConvert">轉換其他檔案</button>
+            </div>
+
+            <!-- 錯誤訊息 -->
+            <div class="error-section hidden" id="errorSection">
+                <div class="error-icon">⚠</div>
+                <h3>轉換失敗</h3>
+                <p class="error-message" id="errorMessage">-</p>
+                <button class="btn-new" id="retryBtn">重試</button>
+            </div>
+        </main>
+
+        <footer>
+            <div class="supported-formats">
+                <p><strong>支援的格式:</strong></p>
+                <p>影片: MP4, WebM, AVI, MKV, MOV, GIF</p>
+                <p>音訊: MP3, WAV, AAC, OGG, FLAC, M4A</p>
+            </div>
+            <p class="note">所有轉換皆在瀏覽器中進行，檔案不會上傳至伺服器</p>
+        </footer>
+    </div>
+
+    <!-- 載入提示 -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-content">
+            <div class="loading-spinner"></div>
+            <p>正在載入 FFmpeg...</p>
+            <p class="loading-hint">首次載入可能需要幾秒鐘</p>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js"></script>
+    <script src="https://unpkg.com/@ffmpeg/util@0.12.1/dist/umd/util.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
