@@ -918,28 +918,63 @@
             }
         }
 
+        // 進度動畫
+        let progressInterval = null;
+        let currentProgress = 0;
+
+        function startProgressAnimation(targetPercent, duration) {
+            if (progressInterval) clearInterval(progressInterval);
+            const startPercent = currentProgress;
+            const startTime = Date.now();
+
+            progressInterval = setInterval(() => {
+                const elapsed = Date.now() - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                currentProgress = startPercent + (targetPercent - startPercent) * progress;
+                progressPercent.textContent = Math.round(currentProgress) + '%';
+                progressFill.style.width = currentProgress + '%';
+
+                if (progress >= 1) {
+                    clearInterval(progressInterval);
+                    progressInterval = null;
+                }
+            }, 50);
+        }
+
+        function stopProgressAnimation() {
+            if (progressInterval) {
+                clearInterval(progressInterval);
+                progressInterval = null;
+            }
+        }
+
         // 轉寫音訊
         async function transcribeAudio(audioBlob) {
             progressContainer.classList.add('visible');
             progressText.textContent = '正在載入模型...';
+            currentProgress = 0;
             progressPercent.textContent = '0%';
             progressFill.style.width = '0%';
 
             try {
                 // 初始化 transcriber
+                startProgressAnimation(15, 1000);
                 const transcriber = await initTranscriber();
 
                 progressText.textContent = '正在解碼音訊...';
-                progressPercent.textContent = '25%';
-                progressFill.style.width = '25%';
+                stopProgressAnimation();
+                currentProgress = 20;
+                startProgressAnimation(30, 500);
 
                 // 將 Blob 轉換為 ArrayBuffer 並解碼
                 const arrayBuffer = await audioBlob.arrayBuffer();
                 const audioData = await decodeAudio(arrayBuffer);
 
-                progressText.textContent = '正在轉寫...';
-                progressPercent.textContent = '50%';
-                progressFill.style.width = '50%';
+                progressText.textContent = '正在轉寫（請稍候）...';
+                stopProgressAnimation();
+                currentProgress = 35;
+                // 轉寫過程緩慢增加到 95%，持續 60 秒
+                startProgressAnimation(95, 60000);
 
                 // 取得語言設定
                 const language = languageSelect.value;
@@ -955,12 +990,12 @@
                     options.task = 'transcribe';
                 }
 
-                progressPercent.textContent = '75%';
-                progressFill.style.width = '75%';
-
                 // 進行轉寫
                 const result = await transcriber(audioData, options);
 
+                // 完成
+                stopProgressAnimation();
+                currentProgress = 100;
                 progressPercent.textContent = '100%';
                 progressFill.style.width = '100%';
 
@@ -974,6 +1009,7 @@
                 status.textContent = '轉寫失敗: ' + error.message;
                 status.classList.add('error');
             } finally {
+                stopProgressAnimation();
                 progressContainer.classList.remove('visible');
                 recordBtn.disabled = false;
             }
