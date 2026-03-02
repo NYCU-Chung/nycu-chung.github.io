@@ -62,7 +62,7 @@ const elements = {
 
 async function initFFmpeg() {
     try {
-        const { createFFmpeg, fetchFile: ff } = FFmpeg;
+        const { createFFmpeg, fetchFile: ff } = window.FFmpeg;
         window.fetchFileUtil = ff;
 
         // 使用單線程版本 (不需要 SharedArrayBuffer)
