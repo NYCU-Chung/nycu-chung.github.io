@@ -173,46 +173,66 @@ async function convert() {
     elements.convertBtn.querySelector('.btn-text').classList.add('hidden');
     elements.convertBtn.querySelector('.btn-loading').classList.remove('hidden');
 
-    try {
-        elements.progressText.textContent = '上傳中...';
-        elements.progressDetail.textContent = `正在上傳 ${formatFileSize(currentFile.size)}...`;
+    // 建立 FormData
+    const formData = new FormData();
+    formData.append('file', currentFile);
+    formData.append('format', options.format);
+    formData.append('quality', options.quality);
+    if (options.resolution) formData.append('resolution', options.resolution);
+    if (options.fps) formData.append('fps', options.fps);
+    if (options.audio_bitrate) formData.append('audio_bitrate', options.audio_bitrate);
+    formData.append('extract_audio', options.extract_audio ? 'true' : 'false');
 
-        // 建立 FormData
-        const formData = new FormData();
-        formData.append('file', currentFile);
-        formData.append('format', options.format);
-        formData.append('quality', options.quality);
-        if (options.resolution) formData.append('resolution', options.resolution);
-        if (options.fps) formData.append('fps', options.fps);
-        if (options.audio_bitrate) formData.append('audio_bitrate', options.audio_bitrate);
-        formData.append('extract_audio', options.extract_audio ? 'true' : 'false');
+    // 使用 XMLHttpRequest 以支援上傳進度
+    const xhr = new XMLHttpRequest();
 
-        // 上傳並開始轉換
-        const response = await fetch(`${API_BASE}/api/convert`, {
-            method: 'POST',
-            body: formData,
-        });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || '上傳失敗');
+    xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable) {
+            const percent = Math.round((e.loaded / e.total) * 100);
+            elements.progressFill.style.width = `${percent * 0.5}%`; // 上傳佔 50%
+            elements.progressText.textContent = `上傳中... ${percent}%`;
+            elements.progressDetail.textContent = `${formatFileSize(e.loaded)} / ${formatFileSize(e.total)}`;
         }
+    });
 
-        const result = await response.json();
-        currentTaskId = result.task_id;
+    xhr.addEventListener('load', () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+                const result = JSON.parse(xhr.responseText);
+                currentTaskId = result.task_id;
+                elements.progressText.textContent = '轉換中... 0%';
+                elements.progressDetail.textContent = '';
+                pollInterval = setInterval(checkTaskStatus, 1000);
+            } catch (e) {
+                showError('伺服器回應格式錯誤');
+                resetConvertButton();
+                hideProgress();
+            }
+        } else {
+            try {
+                const error = JSON.parse(xhr.responseText);
+                showError(`上傳失敗: ${error.error || '未知錯誤'}`);
+            } catch {
+                showError(`上傳失敗: HTTP ${xhr.status}`);
+            }
+            resetConvertButton();
+            hideProgress();
+        }
+    });
 
-        elements.progressText.textContent = '轉換中... 0%';
-        elements.progressDetail.textContent = '';
-
-        // 輪詢任務狀態
-        pollInterval = setInterval(checkTaskStatus, 1000);
-
-    } catch (error) {
-        console.error('Convert failed:', error);
-        showError(`轉換失敗: ${error.message}`);
+    xhr.addEventListener('error', () => {
+        showError('網路錯誤，請檢查連線');
         resetConvertButton();
         hideProgress();
-    }
+    });
+
+    xhr.addEventListener('abort', () => {
+        resetConvertButton();
+        hideProgress();
+    });
+
+    xhr.open('POST', `${API_BASE}/api/convert`);
+    xhr.send(formData);
 }
 
 async function checkTaskStatus() {
@@ -223,7 +243,9 @@ async function checkTaskStatus() {
         const status = await response.json();
 
         if (status.status === 'converting') {
-            elements.progressFill.style.width = `${status.progress}%`;
+            // 轉換佔進度條的 50%-100%
+            const displayProgress = 50 + (status.progress * 0.5);
+            elements.progressFill.style.width = `${displayProgress}%`;
             elements.progressText.textContent = `轉換中... ${status.progress}%`;
         } else if (status.status === 'completed') {
             clearInterval(pollInterval);
