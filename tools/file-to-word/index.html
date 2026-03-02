@@ -1043,7 +1043,59 @@
             }
         }
 
-        // Groq API for polishing
+        // Split text into chunks (around 2500 chars to stay under token limit)
+        function splitTextIntoChunks(text, maxChars = 2500) {
+            const chunks = [];
+            const paragraphs = text.split(/\n\n+/);
+            let currentChunk = '';
+
+            for (const para of paragraphs) {
+                if (currentChunk.length + para.length + 2 > maxChars) {
+                    if (currentChunk) chunks.push(currentChunk.trim());
+                    currentChunk = para;
+                } else {
+                    currentChunk += (currentChunk ? '\n\n' : '') + para;
+                }
+            }
+            if (currentChunk) chunks.push(currentChunk.trim());
+            return chunks;
+        }
+
+        // Call Groq API for a single chunk
+        async function polishChunk(text, apiKey) {
+            const response = await fetch(GROQ_API_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`
+                },
+                body: JSON.stringify({
+                    model: 'llama-3.3-70b-versatile',
+                    messages: [
+                        {
+                            role: 'system',
+                            content: '你是一個專業的繁體中文文字校對助手。以下是從掃描文件 OCR 辨識出的文字，可能包含辨識錯誤。請修正明顯的 OCR 錯誤，包括錯字、漏字、多餘字符，並整理成通順易讀的段落。保持原文意思，不要添加額外內容。直接輸出修正後的文字，不需要任何解釋。'
+                        },
+                        {
+                            role: 'user',
+                            content: text
+                        }
+                    ],
+                    temperature: 0.2,
+                    max_tokens: 4096
+                })
+            });
+
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({}));
+                throw new Error(error.error?.message || `API 錯誤: ${response.status}`);
+            }
+
+            const data = await response.json();
+            return data.choices[0]?.message?.content?.trim() || '';
+        }
+
+        // Groq API for polishing (with chunking for large text)
         async function polishText(text) {
             const apiKey = getApiKey();
             if (!apiKey) {
@@ -1052,41 +1104,27 @@
             }
 
             polishBtn.disabled = true;
-            polishBtn.textContent = '處理中...';
 
             try {
-                const response = await fetch(GROQ_API_URL, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${apiKey}`
-                    },
-                    body: JSON.stringify({
-                        model: 'llama-3.3-70b-versatile',
-                        messages: [
-                            {
-                                role: 'system',
-                                content: '你是一個專業的繁體中文文字校對助手。以下是從掃描文件 OCR 辨識出的文字，可能包含辨識錯誤。請修正明顯的 OCR 錯誤，包括錯字、漏字、多餘字符，並整理成通順易讀的段落。保持原文意思，不要添加額外內容。直接輸出修正後的文字，不需要任何解釋。'
-                            },
-                            {
-                                role: 'user',
-                                content: text
-                            }
-                        ],
-                        temperature: 0.2,
-                        max_tokens: 4096
-                    })
-                });
+                const chunks = splitTextIntoChunks(text);
+                const totalChunks = chunks.length;
+                const polishedChunks = [];
 
-                if (!response.ok) {
-                    const error = await response.json().catch(() => ({}));
-                    throw new Error(error.error?.message || `API 錯誤: ${response.status}`);
+                for (let i = 0; i < chunks.length; i++) {
+                    polishBtn.textContent = totalChunks > 1
+                        ? `處理中 (${i + 1}/${totalChunks})...`
+                        : '處理中...';
+
+                    const polished = await polishChunk(chunks[i], apiKey);
+                    polishedChunks.push(polished);
+
+                    // Add delay between chunks to avoid rate limiting
+                    if (i < chunks.length - 1) {
+                        await new Promise(r => setTimeout(r, 1000));
+                    }
                 }
 
-                const data = await response.json();
-                const polishedText = data.choices[0]?.message?.content?.trim() || '';
-
-                polishTextEl.textContent = polishedText;
+                polishTextEl.textContent = polishedChunks.join('\n\n');
                 polishSection.classList.add('visible');
 
             } catch (error) {
