@@ -1092,6 +1092,49 @@
             return Array.from(pages).sort((a, b) => a - b);
         }
 
+        // Extract text from a single PDF page using PDF.js
+        async function extractTextFromPage(page) {
+            const textContent = await page.getTextContent();
+            const strings = textContent.items.map(item => item.str);
+            return strings.join(' ').trim();
+        }
+
+        // Check if PDF has extractable text (not scanned)
+        async function checkPdfHasText(pdfDocument, samplPages = 3) {
+            const pagesToCheck = Math.min(samplPages, pdfDocument.numPages);
+            let totalChars = 0;
+
+            for (let i = 1; i <= pagesToCheck; i++) {
+                const page = await pdfDocument.getPage(i);
+                const text = await extractTextFromPage(page);
+                totalChars += text.replace(/\s/g, '').length;
+            }
+
+            // If average chars per page > 50, consider it has extractable text
+            return (totalChars / pagesToCheck) > 50;
+        }
+
+        // Extract text from PDF pages
+        async function extractPdfText(pdfDocument, pageNumbers, progressCallback) {
+            const results = [];
+
+            for (let i = 0; i < pageNumbers.length; i++) {
+                const pageNum = pageNumbers[i];
+                if (progressCallback) {
+                    progressCallback(pageNum, i + 1, pageNumbers.length);
+                }
+
+                const page = await pdfDocument.getPage(pageNum);
+                const text = await extractTextFromPage(page);
+
+                if (text.trim()) {
+                    results.push(`=== 第 ${pageNum} 頁 ===\n${text}`);
+                }
+            }
+
+            return results.join('\n\n');
+        }
+
         // File handling
         async function handleFileSelect(file) {
             if (!file) return;
@@ -1204,6 +1247,58 @@
             try {
                 let allText = [];
                 const totalSteps = pagesToProcess.length;
+
+                // For PDF: Check if it has extractable text
+                let useDirectExtraction = false;
+                if (isPDF) {
+                    loadingOverlay.classList.add('visible');
+                    loadingText.textContent = '正在分析 PDF 類型...';
+                    loadingSubtext.textContent = '檢測是否為掃描文件';
+
+                    const hasText = await checkPdfHasText(pdfDoc);
+                    loadingOverlay.classList.remove('visible');
+
+                    if (hasText) {
+                        useDirectExtraction = true;
+                        console.log('PDF has extractable text, using direct extraction');
+                    } else {
+                        console.log('PDF appears to be scanned, using OCR');
+                    }
+                }
+
+                // Direct text extraction for text-based PDFs
+                if (useDirectExtraction) {
+                    loadingOverlay.classList.add('visible');
+                    loadingText.textContent = '直接提取 PDF 文字...';
+                    loadingSubtext.textContent = '此 PDF 包含可提取文字';
+
+                    const extractedText = await extractPdfText(pdfDoc, pagesToProcess, (pageNum, current, total) => {
+                        updateProgress(
+                            (current / total) * 100,
+                            `提取第 ${pageNum} 頁 (${current}/${total})`,
+                            '直接提取文字 (無需 OCR)'
+                        );
+                    });
+
+                    loadingOverlay.classList.remove('visible');
+
+                    if (extractedText.trim()) {
+                        resultText.textContent = extractedText;
+                        resultSection.classList.add('visible');
+                        updateProgress(100, '提取完成', '已直接從 PDF 提取文字');
+
+                        // Still show polish button
+                        setTimeout(() => {
+                            progressSection.classList.remove('visible');
+                            actionButtons.style.display = 'flex';
+                            startOcrBtn.disabled = false;
+                        }, 1000);
+                        return;
+                    } else {
+                        // Fallback to OCR if extraction failed
+                        console.log('Direct extraction returned no text, falling back to OCR');
+                    }
+                }
 
                 if (ocrEngine === 'tesseract') {
                     // Initialize Tesseract worker
