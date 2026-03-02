@@ -954,9 +954,36 @@
             return canvas;
         }
 
-        // Convert canvas to base64
-        function canvasToBase64(canvas) {
-            return canvas.toDataURL('image/png').split(',')[1];
+        // Convert canvas to base64 with size limit (for OCR.space 1MB limit)
+        function canvasToBase64(canvas, maxSizeKB = 900) {
+            // Try PNG first
+            let base64 = canvas.toDataURL('image/png').split(',')[1];
+            let sizeKB = (base64.length * 0.75) / 1024;
+
+            if (sizeKB <= maxSizeKB) {
+                return base64;
+            }
+
+            // If too large, use JPEG with decreasing quality
+            let quality = 0.9;
+            while (quality > 0.3) {
+                base64 = canvas.toDataURL('image/jpeg', quality).split(',')[1];
+                sizeKB = (base64.length * 0.75) / 1024;
+                if (sizeKB <= maxSizeKB) {
+                    return base64;
+                }
+                quality -= 0.1;
+            }
+
+            // If still too large, resize the canvas
+            const scale = Math.sqrt(maxSizeKB / sizeKB) * 0.9;
+            const resizedCanvas = document.createElement('canvas');
+            resizedCanvas.width = Math.floor(canvas.width * scale);
+            resizedCanvas.height = Math.floor(canvas.height * scale);
+            const ctx = resizedCanvas.getContext('2d');
+            ctx.drawImage(canvas, 0, 0, resizedCanvas.width, resizedCanvas.height);
+
+            return resizedCanvas.toDataURL('image/jpeg', 0.8).split(',')[1];
         }
 
         // OCR.space API call
@@ -966,8 +993,12 @@
                 throw new Error('請先設定 OCR.space API Key');
             }
 
+            // Detect image type from base64 header
+            const isJpeg = base64Image.startsWith('/9j/');
+            const mimeType = isJpeg ? 'image/jpeg' : 'image/png';
+
             const formData = new FormData();
-            formData.append('base64Image', 'data:image/png;base64,' + base64Image);
+            formData.append('base64Image', `data:${mimeType};base64,${base64Image}`);
             formData.append('language', language);
             formData.append('isOverlayRequired', 'false');
             formData.append('detectOrientation', 'true');
