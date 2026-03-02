@@ -1100,18 +1100,27 @@
         }
 
         // Check if PDF has extractable text (not scanned)
-        async function checkPdfHasText(pdfDocument, samplPages = 3) {
-            const pagesToCheck = Math.min(samplPages, pdfDocument.numPages);
-            let totalChars = 0;
+        async function checkPdfHasText(pdfDocument, samplePages = 3) {
+            const pagesToCheck = Math.min(samplePages, pdfDocument.numPages);
+            let pagesWithText = 0;
+            const minCharsPerPage = 200; // Minimum chars to consider a page has real text
 
             for (let i = 1; i <= pagesToCheck; i++) {
                 const page = await pdfDocument.getPage(i);
                 const text = await extractTextFromPage(page);
-                totalChars += text.replace(/\s/g, '').length;
+                const charCount = text.replace(/\s/g, '').length;
+
+                // A page needs at least 200 chars to be considered "has text"
+                if (charCount >= minCharsPerPage) {
+                    pagesWithText++;
+                }
+                console.log(`Page ${i}: ${charCount} chars`);
             }
 
-            // If average chars per page > 50, consider it has extractable text
-            return (totalChars / pagesToCheck) > 50;
+            // At least 2/3 of sampled pages should have substantial text
+            const hasText = (pagesWithText / pagesToCheck) >= 0.66;
+            console.log(`PDF text check: ${pagesWithText}/${pagesToCheck} pages have text, hasText=${hasText}`);
+            return hasText;
         }
 
         // Extract text from PDF pages
