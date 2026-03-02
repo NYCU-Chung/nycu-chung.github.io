@@ -68,7 +68,6 @@ async function initFFmpeg() {
         // 使用單線程版本 (不需要 SharedArrayBuffer)
         ffmpeg = createFFmpeg({
             log: true,
-            corePath: 'https://unpkg.com/@ffmpeg/core-st@0.11.1/dist/ffmpeg-core.js',
         });
 
         ffmpeg.setProgress(({ ratio }) => {
