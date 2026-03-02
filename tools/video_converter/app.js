@@ -117,6 +117,15 @@ function handleFile(file) {
         return;
     }
 
+    // 檢查檔案大小 - 超過 100MB 警告
+    const MAX_SIZE_MB = 100;
+    if (file.size > MAX_SIZE_MB * 1024 * 1024) {
+        const sizeMB = (file.size / (1024 * 1024)).toFixed(0);
+        if (!confirm(`檔案大小 ${sizeMB}MB 超過 ${MAX_SIZE_MB}MB，瀏覽器轉換可能會失敗或很慢。\n\n建議使用桌面版 FFmpeg 處理大檔案。\n\n確定要繼續嗎？`)) {
+            return;
+        }
+    }
+
     currentFile = file;
     elements.fileIcon.textContent = fileType === 'video' ? '📹' : '🎵';
     elements.fileName.textContent = file.name;
@@ -176,23 +185,23 @@ function buildFFmpegArgs(inputName, outputName, options) {
         args.push('-vf', `fps=${fps},scale=${scale}:flags=lanczos`);
         args.push('-loop', '0');
     } else {
-        // 視訊輸出 - 優化速度
+        // 視訊輸出 - 簡化參數以確保相容性
         args.push('-c:v', formatConfig.vcodec);
         args.push('-c:a', formatConfig.acodec);
 
-        // 使用 CRF 和快速 preset
+        // 使用 CRF 和 preset（移除可能造成問題的參數）
         if (formatConfig.vcodec === 'libx264') {
             args.push('-crf', qualityConfig.crf);
             args.push('-preset', qualityConfig.preset);
-            // 優化：使用更快的參數
-            args.push('-tune', 'fastdecode');
-            args.push('-movflags', '+faststart'); // 讓影片可以邊下載邊播放
+            // 確保 H.264 相容性
+            args.push('-pix_fmt', 'yuv420p');
+            args.push('-profile:v', 'baseline');
+            args.push('-level', '3.0');
         } else if (formatConfig.vcodec === 'libvpx') {
             args.push('-crf', qualityConfig.crf);
-            args.push('-b:v', '0'); // VPX 需要這個來啟用 CRF 模式
-            args.push('-cpu-used', '4'); // 加速 VP8/VP9 編碼
+            args.push('-b:v', '0');
         } else if (formatConfig.vcodec === 'mpeg4') {
-            args.push('-q:v', '5'); // MPEG4 品質
+            args.push('-q:v', '5');
         }
 
         // 音訊位元率
@@ -207,9 +216,6 @@ function buildFFmpegArgs(inputName, outputName, options) {
         if (options.fps) {
             args.push('-r', options.fps);
         }
-
-        // 優化：限制線程數以避免記憶體問題
-        args.push('-threads', '2');
     }
 
     args.push('-y', outputName);
@@ -268,6 +274,13 @@ async function convert() {
 
         if (outputData.length === 0) {
             throw new Error('轉換失敗：輸出檔案為空');
+        }
+
+        // 檢查輸出檔案大小是否合理（視訊輸出不應小於輸入的 1%）
+        const isVideoOutput = FORMAT_CONFIG[options.format].type === 'video' && !options.extractAudio;
+        if (isVideoOutput && outputData.length < currentFile.size * 0.01) {
+            console.warn(`輸出檔案異常小: ${outputData.length} bytes (輸入: ${currentFile.size} bytes)`);
+            throw new Error('轉換失敗：輸出檔案異常小，可能是記憶體不足。建議使用桌面版 FFmpeg。');
         }
 
         const mimeTypes = {
