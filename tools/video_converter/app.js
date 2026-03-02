@@ -1,41 +1,34 @@
 /**
- * 影片/音訊轉換器
- * 使用 FFmpeg.wasm 0.12.x 在瀏覽器中進行轉換
+ * 影片/音訊轉換器 - 前端
+ * 使用後端 API 進行轉換
  */
 
+// API 端點 - 部署後改成你的網域
+const API_BASE = 'https://YOUR_API_DOMAIN.com';  // TODO: 改成你的 API 網域
+
 const SIZE_THRESHOLDS = {
-    WARN: 100 * 1024 * 1024,
-    FORCE_720P: 200 * 1024 * 1024,
-    FORCE_480P: 400 * 1024 * 1024,
-    MAX: 800 * 1024 * 1024,
+    WARN: 100 * 1024 * 1024,      // 100MB
+    MAX: 500 * 1024 * 1024,        // 500MB
 };
 
 const FORMAT_CONFIG = {
-    mp4: { type: 'video', ext: 'mp4', vcodec: 'libx264', acodec: 'aac' },
-    webm: { type: 'video', ext: 'webm', vcodec: 'libvpx', acodec: 'libvorbis' },
-    avi: { type: 'video', ext: 'avi', vcodec: 'mpeg4', acodec: 'mp3' },
-    mkv: { type: 'video', ext: 'mkv', vcodec: 'libx264', acodec: 'aac' },
-    mov: { type: 'video', ext: 'mov', vcodec: 'libx264', acodec: 'aac' },
+    mp4: { type: 'video', ext: 'mp4' },
+    webm: { type: 'video', ext: 'webm' },
+    avi: { type: 'video', ext: 'avi' },
+    mkv: { type: 'video', ext: 'mkv' },
+    mov: { type: 'video', ext: 'mov' },
     gif: { type: 'video', ext: 'gif' },
-    mp3: { type: 'audio', ext: 'mp3', acodec: 'libmp3lame' },
-    wav: { type: 'audio', ext: 'wav', acodec: 'pcm_s16le' },
-    aac: { type: 'audio', ext: 'aac', acodec: 'aac' },
-    ogg: { type: 'audio', ext: 'ogg', acodec: 'libvorbis' },
-    flac: { type: 'audio', ext: 'flac', acodec: 'flac' },
-    m4a: { type: 'audio', ext: 'm4a', acodec: 'aac' },
+    mp3: { type: 'audio', ext: 'mp3' },
+    wav: { type: 'audio', ext: 'wav' },
+    aac: { type: 'audio', ext: 'aac' },
+    ogg: { type: 'audio', ext: 'ogg' },
+    flac: { type: 'audio', ext: 'flac' },
+    m4a: { type: 'audio', ext: 'm4a' },
 };
 
-const QUALITY_SETTINGS = {
-    high: { crf: '23', preset: 'fast', audioBitrate: '192k' },
-    medium: { crf: '28', preset: 'veryfast', audioBitrate: '128k' },
-    low: { crf: '32', preset: 'ultrafast', audioBitrate: '96k' },
-};
-
-let ffmpeg = null;
 let currentFile = null;
-let outputBlob = null;
-let outputFileName = null;
-let ffmpegLoaded = false;
+let currentTaskId = null;
+let pollInterval = null;
 
 const elements = {
     loadingOverlay: document.getElementById('loadingOverlay'),
@@ -67,49 +60,26 @@ const elements = {
     retryBtn: document.getElementById('retryBtn'),
 };
 
-async function initFFmpeg() {
+async function checkApiHealth() {
     try {
-        const { FFmpeg } = FFmpegWASM;
-        const { toBlobURL } = FFmpegUtil;
-
-        ffmpeg = new FFmpeg();
-
-        ffmpeg.on('progress', ({ progress }) => {
-            const percent = Math.round(progress * 100);
-            elements.progressFill.style.width = `${percent}%`;
-            elements.progressText.textContent = `轉換中... ${percent}%`;
-        });
-
-        ffmpeg.on('log', ({ message }) => {
-            console.log('[FFmpeg]', message);
-        });
-
-        elements.loadingOverlay.querySelector('p').textContent = '正在載入 FFmpeg 核心...';
-
-        // 使用單執行緒核心並將所有資源轉為 Blob URL 避免跨域問題
-        const coreBaseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm';
-        const ffmpegBaseURL = 'https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/esm';
-
-        await ffmpeg.load({
-            coreURL: await toBlobURL(`${coreBaseURL}/ffmpeg-core.js`, 'text/javascript'),
-            wasmURL: await toBlobURL(`${coreBaseURL}/ffmpeg-core.wasm`, 'application/wasm'),
-            classWorkerURL: await toBlobURL(`${ffmpegBaseURL}/worker.js`, 'text/javascript'),
-        });
-
-        ffmpegLoaded = true;
-        elements.loadingOverlay.classList.add('hidden');
-        console.log('FFmpeg loaded successfully');
-    } catch (error) {
-        console.error('Failed to load FFmpeg:', error);
-        elements.loadingOverlay.innerHTML = `
-            <div class="loading-content">
-                <div class="error-icon">⚠</div>
-                <p>FFmpeg 載入失敗</p>
-                <p class="loading-hint">${error.message}</p>
-                <button onclick="location.reload()" class="btn-new" style="margin-top: 1rem;">重新載入</button>
-            </div>
-        `;
+        const response = await fetch(`${API_BASE}/api/health`);
+        if (response.ok) {
+            elements.loadingOverlay.classList.add('hidden');
+            return true;
+        }
+    } catch (e) {
+        console.error('API health check failed:', e);
     }
+
+    elements.loadingOverlay.innerHTML = `
+        <div class="loading-content">
+            <div class="error-icon">⚠</div>
+            <p>無法連接到轉換伺服器</p>
+            <p class="loading-hint">請確認伺服器已啟動</p>
+            <button onclick="location.reload()" class="btn-new" style="margin-top: 1rem;">重試</button>
+        </div>
+    `;
+    return false;
 }
 
 function formatFileSize(bytes) {
@@ -139,23 +109,12 @@ function handleFile(file) {
     const sizeMB = (file.size / (1024 * 1024)).toFixed(0);
 
     if (file.size > SIZE_THRESHOLDS.MAX) {
-        showError(`檔案大小 ${sizeMB}MB 超過上限 (800MB)。\n\n請使用桌面版 FFmpeg 處理超大檔案。`);
+        showError(`檔案大小 ${sizeMB}MB 超過上限 (500MB)`);
         return;
     }
 
-    let autoResolution = '';
-    if (file.size > SIZE_THRESHOLDS.FORCE_480P) {
-        if (!confirm(`檔案大小 ${sizeMB}MB，將自動降低至 480p。\n\n確定要繼續嗎？`)) {
-            return;
-        }
-        autoResolution = '854x480';
-    } else if (file.size > SIZE_THRESHOLDS.FORCE_720P) {
-        if (!confirm(`檔案大小 ${sizeMB}MB，將自動降低至 720p。\n\n確定要繼續嗎？`)) {
-            return;
-        }
-        autoResolution = '1280x720';
-    } else if (file.size > SIZE_THRESHOLDS.WARN) {
-        if (!confirm(`檔案大小 ${sizeMB}MB，瀏覽器轉換可能較慢。\n\n確定要繼續嗎？`)) {
+    if (file.size > SIZE_THRESHOLDS.WARN) {
+        if (!confirm(`檔案大小 ${sizeMB}MB，上傳和轉換可能需要較長時間。\n\n確定要繼續嗎？`)) {
             return;
         }
     }
@@ -173,17 +132,17 @@ function handleFile(file) {
         elements.outputFormat.value = 'mp3';
     }
 
-    if (autoResolution && fileType === 'video') {
-        elements.resolution.value = autoResolution;
-        elements.quality.value = 'low';
-    }
-
     hideError();
     hideDownload();
 }
 
 function removeFile() {
     currentFile = null;
+    currentTaskId = null;
+    if (pollInterval) {
+        clearInterval(pollInterval);
+        pollInterval = null;
+    }
     elements.fileInput.value = '';
     elements.fileInfo.classList.add('hidden');
     elements.convertSection.classList.add('hidden');
@@ -193,174 +152,114 @@ function removeFile() {
     hideError();
 }
 
-function buildFFmpegArgs(inputName, outputName, options) {
-    const args = ['-i', inputName];
-    const formatConfig = FORMAT_CONFIG[options.format];
-    const qualityConfig = QUALITY_SETTINGS[options.quality];
-    const isOutputAudio = formatConfig.type === 'audio';
-    const isExtractAudio = options.extractAudio;
-
-    if (isOutputAudio || isExtractAudio) {
-        args.push('-vn');
-        if (formatConfig.acodec) {
-            args.push('-c:a', formatConfig.acodec);
-        }
-        args.push('-b:a', options.audioBitrate || qualityConfig.audioBitrate);
-    } else if (options.format === 'gif') {
-        let scale = '480:-1';
-        if (options.resolution) {
-            const [w] = options.resolution.split('x');
-            scale = `${w}:-1`;
-        }
-        const fps = options.fps || '10';
-        args.push('-vf', `fps=${fps},scale=${scale}:flags=lanczos`);
-        args.push('-loop', '0');
-    } else {
-        args.push('-c:v', formatConfig.vcodec);
-        args.push('-c:a', formatConfig.acodec);
-
-        if (formatConfig.vcodec === 'libx264') {
-            args.push('-crf', qualityConfig.crf);
-            args.push('-preset', qualityConfig.preset);
-            args.push('-pix_fmt', 'yuv420p');
-            args.push('-profile:v', 'baseline');
-            args.push('-level', '3.0');
-        } else if (formatConfig.vcodec === 'libvpx') {
-            args.push('-crf', qualityConfig.crf);
-            args.push('-b:v', '0');
-        } else if (formatConfig.vcodec === 'mpeg4') {
-            args.push('-q:v', '5');
-        }
-
-        args.push('-b:a', options.audioBitrate || qualityConfig.audioBitrate);
-
-        if (options.resolution) {
-            args.push('-s', options.resolution);
-        }
-
-        if (options.fps) {
-            args.push('-r', options.fps);
-        }
-    }
-
-    args.push('-y', outputName);
-    return args;
-}
-
 async function convert() {
-    if (!currentFile || !ffmpegLoaded) return;
-
-    const { fetchFile } = FFmpegUtil;
+    if (!currentFile) return;
 
     const options = {
         format: elements.outputFormat.value,
         quality: elements.quality.value,
         resolution: elements.resolution.value,
         fps: elements.fps.value,
-        audioBitrate: elements.audioBitrate.value,
-        extractAudio: elements.extractAudio.checked,
+        audio_bitrate: elements.audioBitrate.value,
+        extract_audio: elements.extractAudio.checked,
     };
 
-    if (options.extractAudio && FORMAT_CONFIG[options.format].type === 'video') {
+    if (options.extract_audio && FORMAT_CONFIG[options.format].type === 'video') {
         options.format = 'mp3';
     }
-
-    const inputExt = currentFile.name.split('.').pop().toLowerCase();
-    const inputName = `input.${inputExt}`;
-    const outputExt = FORMAT_CONFIG[options.format].ext;
-    const baseName = currentFile.name.replace(/\.[^/.]+$/, '');
-    outputFileName = `${baseName}_converted.${outputExt}`;
-    const outputName = `output.${outputExt}`;
 
     showProgress();
     elements.convertBtn.disabled = true;
     elements.convertBtn.querySelector('.btn-text').classList.add('hidden');
     elements.convertBtn.querySelector('.btn-loading').classList.remove('hidden');
 
-    const startTime = Date.now();
-
     try {
-        elements.progressText.textContent = '準備檔案...';
-        elements.progressDetail.textContent = `讀取 ${formatFileSize(currentFile.size)}...`;
+        elements.progressText.textContent = '上傳中...';
+        elements.progressDetail.textContent = `正在上傳 ${formatFileSize(currentFile.size)}...`;
 
-        await ffmpeg.writeFile(inputName, await fetchFile(currentFile));
+        // 建立 FormData
+        const formData = new FormData();
+        formData.append('file', currentFile);
+        formData.append('format', options.format);
+        formData.append('quality', options.quality);
+        if (options.resolution) formData.append('resolution', options.resolution);
+        if (options.fps) formData.append('fps', options.fps);
+        if (options.audio_bitrate) formData.append('audio_bitrate', options.audio_bitrate);
+        formData.append('extract_audio', options.extract_audio ? 'true' : 'false');
 
-        const args = buildFFmpegArgs(inputName, outputName, options);
-        console.log('FFmpeg args:', args.join(' '));
+        // 上傳並開始轉換
+        const response = await fetch(`${API_BASE}/api/convert`, {
+            method: 'POST',
+            body: formData,
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || '上傳失敗');
+        }
+
+        const result = await response.json();
+        currentTaskId = result.task_id;
 
         elements.progressText.textContent = '轉換中... 0%';
+        elements.progressDetail.textContent = '';
 
-        await ffmpeg.exec(args);
+        // 輪詢任務狀態
+        pollInterval = setInterval(checkTaskStatus, 1000);
 
-        elements.progressText.textContent = '讀取輸出...';
-
-        let outputData;
-        try {
-            outputData = await ffmpeg.readFile(outputName);
-        } catch (e) {
-            throw new Error('轉換失敗：無法生成輸出檔案');
-        }
-
-        if (outputData.length === 0) {
-            throw new Error('轉換失敗：輸出檔案為空');
-        }
-
-        const mimeTypes = {
-            mp4: 'video/mp4',
-            webm: 'video/webm',
-            avi: 'video/x-msvideo',
-            mkv: 'video/x-matroska',
-            mov: 'video/quicktime',
-            gif: 'image/gif',
-            mp3: 'audio/mpeg',
-            wav: 'audio/wav',
-            aac: 'audio/aac',
-            ogg: 'audio/ogg',
-            flac: 'audio/flac',
-            m4a: 'audio/mp4',
-        };
-
-        outputBlob = new Blob([outputData.buffer], { type: mimeTypes[outputExt] || 'application/octet-stream' });
-
-        // 清理
-        try {
-            await ffmpeg.deleteFile(inputName);
-            await ffmpeg.deleteFile(outputName);
-        } catch (e) {
-            console.warn('清理暫存檔案失敗:', e);
-        }
-
-        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-        console.log(`轉換完成，耗時 ${elapsed} 秒`);
-
-        showDownload();
     } catch (error) {
-        console.error('Conversion failed:', error);
-
-        try {
-            await ffmpeg.deleteFile(inputName);
-            await ffmpeg.deleteFile(outputName);
-        } catch (e) {}
-
+        console.error('Convert failed:', error);
         showError(`轉換失敗: ${error.message}`);
-    } finally {
-        elements.convertBtn.disabled = false;
-        elements.convertBtn.querySelector('.btn-text').classList.remove('hidden');
-        elements.convertBtn.querySelector('.btn-loading').classList.add('hidden');
+        resetConvertButton();
         hideProgress();
     }
 }
 
+async function checkTaskStatus() {
+    if (!currentTaskId) return;
+
+    try {
+        const response = await fetch(`${API_BASE}/api/status/${currentTaskId}`);
+        const status = await response.json();
+
+        if (status.status === 'converting') {
+            elements.progressFill.style.width = `${status.progress}%`;
+            elements.progressText.textContent = `轉換中... ${status.progress}%`;
+        } else if (status.status === 'completed') {
+            clearInterval(pollInterval);
+            pollInterval = null;
+
+            elements.progressFill.style.width = '100%';
+            elements.progressText.textContent = '轉換完成！';
+
+            // 顯示下載
+            showDownload(status.output_filename, status.output_size);
+            resetConvertButton();
+            hideProgress();
+
+        } else if (status.status === 'failed') {
+            clearInterval(pollInterval);
+            pollInterval = null;
+
+            showError(`轉換失敗: ${status.error || '未知錯誤'}`);
+            resetConvertButton();
+            hideProgress();
+        }
+
+    } catch (error) {
+        console.error('Status check failed:', error);
+    }
+}
+
+function resetConvertButton() {
+    elements.convertBtn.disabled = false;
+    elements.convertBtn.querySelector('.btn-text').classList.remove('hidden');
+    elements.convertBtn.querySelector('.btn-loading').classList.add('hidden');
+}
+
 function download() {
-    if (!outputBlob || !outputFileName) return;
-    const url = URL.createObjectURL(outputBlob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = outputFileName;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    if (!currentTaskId) return;
+    window.location.href = `${API_BASE}/api/download/${currentTaskId}`;
 }
 
 function showProgress() {
@@ -374,15 +273,13 @@ function hideProgress() {
     elements.progressSection.classList.add('hidden');
 }
 
-function showDownload() {
+function showDownload(filename, size) {
     elements.downloadSection.classList.remove('hidden');
-    elements.outputInfo.textContent = `${outputFileName} (${formatFileSize(outputBlob.size)})`;
+    elements.outputInfo.textContent = `${filename} (${formatFileSize(size)})`;
 }
 
 function hideDownload() {
     elements.downloadSection.classList.add('hidden');
-    outputBlob = null;
-    outputFileName = null;
 }
 
 function showError(message) {
@@ -437,4 +334,4 @@ elements.extractAudio.addEventListener('change', (e) => {
 });
 
 // 初始化
-initFFmpeg();
+checkApiHealth();

@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>影片/音訊轉換器</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎬</text></svg>">
-    <script src="coi-serviceworker.js"></script>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -167,7 +166,7 @@
                 <p>影片: MP4, WebM, AVI, MKV, MOV, GIF</p>
                 <p>音訊: MP3, WAV, AAC, OGG, FLAC, M4A</p>
             </div>
-            <p class="note">所有轉換皆在瀏覽器中進行，檔案不會上傳至伺服器</p>
+            <p class="note">檔案會上傳到伺服器進行轉換，轉換後 1 小時內自動刪除</p>
         </footer>
     </div>
 
@@ -175,13 +174,11 @@
     <div class="loading-overlay" id="loadingOverlay">
         <div class="loading-content">
             <div class="loading-spinner"></div>
-            <p>正在載入 FFmpeg...</p>
-            <p class="loading-hint">首次載入可能需要幾秒鐘</p>
+            <p>正在連接伺服器...</p>
+            <p class="loading-hint">請稍候</p>
         </div>
     </div>
 
-    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js"></script>
-    <script src="https://unpkg.com/@ffmpeg/util@0.12.1/dist/umd/index.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
