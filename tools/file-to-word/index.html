@@ -1006,12 +1006,8 @@
                     }
 
                     // Perform OCR
-                    const result = await worker.recognize(imageData, {}, {
-                        progress: (p) => {
-                            const pageProgress = baseProgress + (p * stepSize);
-                            updateProgress(pageProgress, null, `辨識進度: ${Math.round(p * 100)}%`);
-                        }
-                    });
+                    updateProgress(baseProgress + stepSize * 0.5, null, `辨識中...`);
+                    const result = await worker.recognize(imageData);
 
                     const text = result.data.text.trim();
                     if (text) {
