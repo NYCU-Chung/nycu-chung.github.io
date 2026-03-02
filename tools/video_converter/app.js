@@ -1,27 +1,28 @@
 /**
  * 影片/音訊轉換器
- * 使用 FFmpeg.wasm 在瀏覽器中進行轉換 (單線程版本)
+ * 使用 FFmpeg.wasm 在瀏覽器中進行轉換
  */
 
 const FORMAT_CONFIG = {
-    mp4: { type: 'video', ext: 'mp4' },
-    webm: { type: 'video', ext: 'webm' },
-    avi: { type: 'video', ext: 'avi' },
-    mkv: { type: 'video', ext: 'mkv' },
-    mov: { type: 'video', ext: 'mov' },
+    mp4: { type: 'video', ext: 'mp4', vcodec: 'libx264', acodec: 'aac' },
+    webm: { type: 'video', ext: 'webm', vcodec: 'libvpx', acodec: 'libvorbis' },
+    avi: { type: 'video', ext: 'avi', vcodec: 'mpeg4', acodec: 'mp3' },
+    mkv: { type: 'video', ext: 'mkv', vcodec: 'libx264', acodec: 'aac' },
+    mov: { type: 'video', ext: 'mov', vcodec: 'libx264', acodec: 'aac' },
     gif: { type: 'video', ext: 'gif' },
-    mp3: { type: 'audio', ext: 'mp3' },
-    wav: { type: 'audio', ext: 'wav' },
-    aac: { type: 'audio', ext: 'aac' },
-    ogg: { type: 'audio', ext: 'ogg' },
-    flac: { type: 'audio', ext: 'flac' },
-    m4a: { type: 'audio', ext: 'm4a' },
+    mp3: { type: 'audio', ext: 'mp3', acodec: 'libmp3lame' },
+    wav: { type: 'audio', ext: 'wav', acodec: 'pcm_s16le' },
+    aac: { type: 'audio', ext: 'aac', acodec: 'aac' },
+    ogg: { type: 'audio', ext: 'ogg', acodec: 'libvorbis' },
+    flac: { type: 'audio', ext: 'flac', acodec: 'flac' },
+    m4a: { type: 'audio', ext: 'm4a', acodec: 'aac' },
 };
 
+// 優化速度：使用更快的 preset
 const QUALITY_SETTINGS = {
-    high: { video: '-crf 18', audio: '-b:a 320k' },
-    medium: { video: '-crf 23', audio: '-b:a 192k' },
-    low: { video: '-crf 28', audio: '-b:a 128k' },
+    high: { crf: '23', preset: 'fast', audioBitrate: '192k' },
+    medium: { crf: '28', preset: 'veryfast', audioBitrate: '128k' },
+    low: { crf: '32', preset: 'ultrafast', audioBitrate: '96k' },
 };
 
 let ffmpeg = null;
@@ -65,7 +66,6 @@ async function initFFmpeg() {
         const { createFFmpeg, fetchFile: ff } = window.FFmpeg;
         window.fetchFileUtil = ff;
 
-        // 使用單線程版本 (不需要 SharedArrayBuffer)
         ffmpeg = createFFmpeg({
             log: true,
         });
@@ -99,16 +99,6 @@ function formatFileSize(bytes) {
     const sizes = ['B', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-}
-
-function formatDuration(seconds) {
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    const s = seconds % 60;
-    if (h > 0) {
-        return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-    }
-    return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
 function getFileType(file) {
@@ -163,37 +153,63 @@ function buildFFmpegArgs(inputName, outputName, options) {
     const isExtractAudio = options.extractAudio;
 
     if (isOutputAudio || isExtractAudio) {
-        args.push('-vn');
+        // 音訊輸出
+        args.push('-vn'); // 移除視訊
+
+        if (formatConfig.acodec) {
+            args.push('-c:a', formatConfig.acodec);
+        }
+
         if (options.audioBitrate) {
             args.push('-b:a', options.audioBitrate);
         } else {
-            args.push('-b:a', qualityConfig.audio.split(' ')[1]);
+            args.push('-b:a', qualityConfig.audioBitrate);
         }
+    } else if (options.format === 'gif') {
+        // GIF 特殊處理
+        let scale = '480:-1';
+        if (options.resolution) {
+            const [w] = options.resolution.split('x');
+            scale = `${w}:-1`;
+        }
+        const fps = options.fps || '10';
+        args.push('-vf', `fps=${fps},scale=${scale}:flags=lanczos`);
+        args.push('-loop', '0');
     } else {
-        if (options.format === 'gif') {
-            let scale = '480:-1';
-            if (options.resolution) {
-                const [w] = options.resolution.split('x');
-                scale = `${w}:-1`;
-            }
-            const fps = options.fps || '10';
-            args.push('-vf', `fps=${fps},scale=${scale}:flags=lanczos`);
-            args.push('-loop', '0');
-        } else {
-            args.push('-c:v', 'libx264');
-            args.push('-c:a', 'aac');
-            args.push(qualityConfig.video.split(' ')[0], qualityConfig.video.split(' ')[1]);
+        // 視訊輸出 - 優化速度
+        args.push('-c:v', formatConfig.vcodec);
+        args.push('-c:a', formatConfig.acodec);
 
-            if (options.resolution) {
-                args.push('-s', options.resolution);
-            }
-            if (options.fps) {
-                args.push('-r', options.fps);
-            }
-            if (options.audioBitrate) {
-                args.push('-b:a', options.audioBitrate);
-            }
+        // 使用 CRF 和快速 preset
+        if (formatConfig.vcodec === 'libx264') {
+            args.push('-crf', qualityConfig.crf);
+            args.push('-preset', qualityConfig.preset);
+            // 優化：使用更快的參數
+            args.push('-tune', 'fastdecode');
+            args.push('-movflags', '+faststart'); // 讓影片可以邊下載邊播放
+        } else if (formatConfig.vcodec === 'libvpx') {
+            args.push('-crf', qualityConfig.crf);
+            args.push('-b:v', '0'); // VPX 需要這個來啟用 CRF 模式
+            args.push('-cpu-used', '4'); // 加速 VP8/VP9 編碼
+        } else if (formatConfig.vcodec === 'mpeg4') {
+            args.push('-q:v', '5'); // MPEG4 品質
         }
+
+        // 音訊位元率
+        args.push('-b:a', options.audioBitrate || qualityConfig.audioBitrate);
+
+        // 解析度
+        if (options.resolution) {
+            args.push('-s', options.resolution);
+        }
+
+        // 幀率
+        if (options.fps) {
+            args.push('-r', options.fps);
+        }
+
+        // 優化：限制線程數以避免記憶體問題
+        args.push('-threads', '2');
     }
 
     args.push('-y', outputName);
@@ -216,7 +232,7 @@ async function convert() {
         options.format = 'mp3';
     }
 
-    const inputExt = currentFile.name.split('.').pop();
+    const inputExt = currentFile.name.split('.').pop().toLowerCase();
     const inputName = `input.${inputExt}`;
     const outputExt = FORMAT_CONFIG[options.format].ext;
     const baseName = currentFile.name.replace(/\.[^/.]+$/, '');
@@ -227,6 +243,8 @@ async function convert() {
     elements.convertBtn.disabled = true;
     elements.convertBtn.querySelector('.btn-text').classList.add('hidden');
     elements.convertBtn.querySelector('.btn-loading').classList.remove('hidden');
+
+    const startTime = Date.now();
 
     try {
         elements.progressText.textContent = '準備檔案...';
@@ -239,7 +257,18 @@ async function convert() {
         await ffmpeg.run(...args);
 
         elements.progressText.textContent = '完成處理...';
-        const outputData = ffmpeg.FS('readFile', outputName);
+
+        // 檢查輸出檔案是否存在
+        let outputData;
+        try {
+            outputData = ffmpeg.FS('readFile', outputName);
+        } catch (e) {
+            throw new Error('轉換失敗：無法生成輸出檔案');
+        }
+
+        if (outputData.length === 0) {
+            throw new Error('轉換失敗：輸出檔案為空');
+        }
 
         const mimeTypes = {
             mp4: 'video/mp4',
@@ -258,8 +287,16 @@ async function convert() {
 
         outputBlob = new Blob([outputData.buffer], { type: mimeTypes[outputExt] || 'application/octet-stream' });
 
-        ffmpeg.FS('unlink', inputName);
-        ffmpeg.FS('unlink', outputName);
+        // 清理
+        try {
+            ffmpeg.FS('unlink', inputName);
+            ffmpeg.FS('unlink', outputName);
+        } catch (e) {
+            console.warn('清理暫存檔案失敗:', e);
+        }
+
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+        console.log(`轉換完成，耗時 ${elapsed} 秒`);
 
         showDownload();
     } catch (error) {
