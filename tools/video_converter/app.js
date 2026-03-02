@@ -86,12 +86,14 @@ async function initFFmpeg() {
 
         elements.loadingOverlay.querySelector('p').textContent = '正在載入 FFmpeg 核心...';
 
-        // 使用單執行緒核心避免多執行緒問題
-        const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm';
+        // 使用單執行緒核心並將所有資源轉為 Blob URL 避免跨域問題
+        const coreBaseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm';
+        const ffmpegBaseURL = 'https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/esm';
 
         await ffmpeg.load({
-            coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-            wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+            coreURL: await toBlobURL(`${coreBaseURL}/ffmpeg-core.js`, 'text/javascript'),
+            wasmURL: await toBlobURL(`${coreBaseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+            classWorkerURL: await toBlobURL(`${ffmpegBaseURL}/worker.js`, 'text/javascript'),
         });
 
         ffmpegLoaded = true;
