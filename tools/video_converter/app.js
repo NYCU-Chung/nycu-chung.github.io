@@ -28,6 +28,7 @@ const FORMAT_CONFIG = {
 let currentFile = null;
 let currentTaskId = null;
 let pollInterval = null;
+let currentXhr = null;  // 追蹤當前上傳請求
 
 const elements = {
     loadingOverlay: document.getElementById('loadingOverlay'),
@@ -57,6 +58,7 @@ const elements = {
     errorSection: document.getElementById('errorSection'),
     errorMessage: document.getElementById('errorMessage'),
     retryBtn: document.getElementById('retryBtn'),
+    cancelBtn: document.getElementById('cancelBtn'),
 };
 
 async function checkApiHealth() {
@@ -179,6 +181,7 @@ async function convert() {
 
     // 使用 XMLHttpRequest 以支援上傳進度
     const xhr = new XMLHttpRequest();
+    currentXhr = xhr;  // 追蹤以便中止
     const fileSize = currentFile.size;
 
     xhr.upload.addEventListener('loadstart', () => {
@@ -358,6 +361,44 @@ elements.extractAudio.addEventListener('change', (e) => {
         if (FORMAT_CONFIG[currentFormat].type === 'video') {
             elements.outputFormat.value = 'mp3';
         }
+    }
+});
+
+// 中止轉換
+async function cancelConversion() {
+    // 中止上傳中的請求
+    if (currentXhr) {
+        currentXhr.abort();
+        currentXhr = null;
+    }
+
+    // 停止輪詢
+    if (pollInterval) {
+        clearInterval(pollInterval);
+        pollInterval = null;
+    }
+
+    // 通知伺服器取消任務
+    if (currentTaskId) {
+        try {
+            await fetch(`${API_BASE}/api/cancel/${currentTaskId}`, { method: 'POST' });
+        } catch (e) {
+            console.error('Cancel request failed:', e);
+        }
+        currentTaskId = null;
+    }
+
+    resetConvertButton();
+    hideProgress();
+    elements.convertSection.classList.remove('hidden');
+}
+
+elements.cancelBtn.addEventListener('click', cancelConversion);
+
+// 頁面離開時自動中止
+window.addEventListener('beforeunload', (e) => {
+    if (currentXhr || currentTaskId) {
+        cancelConversion();
     }
 });
 

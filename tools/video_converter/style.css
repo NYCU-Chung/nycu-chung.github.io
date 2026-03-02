@@ -293,6 +293,23 @@ header h1 {
     color: var(--text-muted);
 }
 
+.btn-cancel {
+    margin-top: 1rem;
+    padding: 0.5rem 1.5rem;
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-cancel:hover {
+    background: var(--error);
+    color: white;
+    border-color: var(--error);
+}
+
 /* Download Section */
 .download-section {
     margin-top: 1.5rem;
