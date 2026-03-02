@@ -3,8 +3,8 @@
  * 使用 FFmpeg.wasm 在瀏覽器中進行轉換
  */
 
-import { FFmpeg } from 'https://esm.sh/@ffmpeg/ffmpeg@0.12.10';
-import { fetchFile, toBlobURL } from 'https://esm.sh/@ffmpeg/util@0.12.1';
+import { FFmpeg } from 'https://esm.sh/@ffmpeg/ffmpeg@0.12.10?bundle-deps';
+import { fetchFile, toBlobURL } from 'https://esm.sh/@ffmpeg/util@0.12.1?bundle-deps';
 
 // 格式設定
 const FORMAT_CONFIG = {
@@ -86,10 +86,11 @@ async function initFFmpeg() {
     });
 
     try {
-        const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm';
+        const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
         await ffmpeg.load({
             coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
             wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+            workerURL: await toBlobURL(`https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd/814.ffmpeg.js`, 'text/javascript'),
         });
         elements.loadingOverlay.classList.add('hidden');
         console.log('FFmpeg loaded successfully');
