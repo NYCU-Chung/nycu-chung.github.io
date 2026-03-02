@@ -594,19 +594,34 @@
         <div class="card">
             <div class="settings">
                 <div class="setting-group">
+                    <label for="ocrEngine">OCR 引擎</label>
+                    <select id="ocrEngine">
+                        <option value="ocrspace" selected>OCR.space (推薦，免費 API)</option>
+                        <option value="tesseract">Tesseract.js (本地)</option>
+                    </select>
+                </div>
+                <div class="setting-group">
                     <label for="language">語言 Language</label>
                     <select id="language">
-                        <option value="chi_tra" selected>繁體中文</option>
-                        <option value="chi_sim">簡體中文</option>
+                        <option value="cht" selected>繁體中文</option>
+                        <option value="chs">簡體中文</option>
                         <option value="eng">English</option>
                         <option value="jpn">日本語</option>
                         <option value="kor">한국어</option>
-                        <option value="chi_tra+eng">繁中+英文</option>
                     </select>
                 </div>
                 <div class="setting-group">
                     <label for="pageRange">頁面範圍 (PDF)</label>
                     <input type="text" id="pageRange" placeholder="例: 1-5 或 1,3,5" value="">
+                </div>
+                <div class="setting-group">
+                    <label for="preprocessing">圖片預處理</label>
+                    <select id="preprocessing">
+                        <option value="auto" selected>自動</option>
+                        <option value="none">無</option>
+                        <option value="bw">黑白化</option>
+                        <option value="contrast">高對比</option>
+                    </select>
                 </div>
             </div>
 
@@ -702,10 +717,26 @@
             </div>
         </div>
 
+        <!-- OCR.space API Key Section -->
+        <div class="card" id="ocrspaceKeySection" style="display: none;">
+            <div class="setting-group" style="margin-bottom: 0;">
+                <label for="ocrspaceKeyInput">OCR.space API Key (免費申請)</label>
+                <div style="display: flex; gap: 0.5rem;">
+                    <input type="password" id="ocrspaceKeyInput" placeholder="輸入 API Key..." style="flex: 1; background: var(--bg-input); color: var(--text); border: 1px solid var(--border); border-radius: 0.5rem; padding: 0.75rem;">
+                    <button class="btn-small" id="saveOcrspaceKey">儲存</button>
+                </div>
+                <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">
+                    <a href="https://ocr.space/ocrapi/freekey" target="_blank" style="color: var(--primary);">點此免費取得 API Key</a>
+                    (免費版每月 25,000 次)
+                </small>
+            </div>
+        </div>
+
         <p class="info">
-            由 <a href="https://tesseract.projectnaptha.com/" target="_blank">Tesseract.js</a>
+            由 <a href="https://ocr.space/OCRAPI" target="_blank">OCR.space</a>、
+            <a href="https://tesseract.projectnaptha.com/" target="_blank">Tesseract.js</a>
             與 <a href="https://mozilla.github.io/pdf.js/" target="_blank">PDF.js</a> 驅動<br>
-            所有處理皆在瀏覽器本地完成，檔案不會上傳至伺服器
+            使用 OCR.space 需上傳圖片至 API；Tesseract.js 完全在本地處理
         </p>
     </div>
 
@@ -738,6 +769,11 @@
         const cancelBtn = document.getElementById('cancelBtn');
         const languageSelect = document.getElementById('language');
         const pageRangeInput = document.getElementById('pageRange');
+        const ocrEngineSelect = document.getElementById('ocrEngine');
+        const preprocessingSelect = document.getElementById('preprocessing');
+        const ocrspaceKeySection = document.getElementById('ocrspaceKeySection');
+        const ocrspaceKeyInput = document.getElementById('ocrspaceKeyInput');
+        const saveOcrspaceKeyBtn = document.getElementById('saveOcrspaceKey');
 
         const previewSection = document.getElementById('previewSection');
         const previewContainer = document.getElementById('previewContainer');
@@ -782,7 +818,26 @@
         let worker = null;
 
         const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
+        const OCRSPACE_API_URL = 'https://api.ocr.space/parse/image';
         const STORAGE_KEY = 'groq_api_key';
+        const OCRSPACE_KEY = 'ocrspace_api_key';
+
+        // Language code mapping for different engines
+        const LANG_MAP_TESSERACT = {
+            'cht': 'chi_tra',
+            'chs': 'chi_sim',
+            'eng': 'eng',
+            'jpn': 'jpn',
+            'kor': 'kor'
+        };
+
+        const LANG_MAP_OCRSPACE = {
+            'cht': 'cht',
+            'chs': 'chs',
+            'eng': 'eng',
+            'jpn': 'jpn',
+            'kor': 'kor'
+        };
 
         // Helper functions
         function formatFileSize(bytes) {
@@ -814,6 +869,134 @@
             progressFill.style.width = percent + '%';
             if (text) progressText.textContent = text;
             if (status) progressStatus.textContent = status;
+        }
+
+        // OCR.space API key functions
+        function getOcrspaceKey() {
+            return localStorage.getItem(OCRSPACE_KEY) || '';
+        }
+
+        function saveOcrspaceKey(key) {
+            localStorage.setItem(OCRSPACE_KEY, key);
+        }
+
+        // Image preprocessing function
+        function preprocessImage(canvas, mode) {
+            const ctx = canvas.getContext('2d');
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imageData.data;
+
+            if (mode === 'none') {
+                return canvas;
+            }
+
+            // Convert to grayscale first
+            for (let i = 0; i < data.length; i += 4) {
+                const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+                data[i] = gray;
+                data[i + 1] = gray;
+                data[i + 2] = gray;
+            }
+
+            if (mode === 'bw') {
+                // Otsu's threshold for binarization
+                const histogram = new Array(256).fill(0);
+                for (let i = 0; i < data.length; i += 4) {
+                    histogram[Math.round(data[i])]++;
+                }
+
+                const total = canvas.width * canvas.height;
+                let sum = 0;
+                for (let i = 0; i < 256; i++) sum += i * histogram[i];
+
+                let sumB = 0, wB = 0, threshold = 0, maxVariance = 0;
+                for (let t = 0; t < 256; t++) {
+                    wB += histogram[t];
+                    if (wB === 0) continue;
+                    const wF = total - wB;
+                    if (wF === 0) break;
+
+                    sumB += t * histogram[t];
+                    const mB = sumB / wB;
+                    const mF = (sum - sumB) / wF;
+                    const variance = wB * wF * Math.pow(mB - mF, 2);
+
+                    if (variance > maxVariance) {
+                        maxVariance = variance;
+                        threshold = t;
+                    }
+                }
+
+                for (let i = 0; i < data.length; i += 4) {
+                    const val = data[i] > threshold ? 255 : 0;
+                    data[i] = val;
+                    data[i + 1] = val;
+                    data[i + 2] = val;
+                }
+            } else if (mode === 'contrast' || mode === 'auto') {
+                // Auto contrast enhancement
+                let min = 255, max = 0;
+                for (let i = 0; i < data.length; i += 4) {
+                    if (data[i] < min) min = data[i];
+                    if (data[i] > max) max = data[i];
+                }
+
+                const range = max - min || 1;
+                for (let i = 0; i < data.length; i += 4) {
+                    const val = ((data[i] - min) / range) * 255;
+                    data[i] = val;
+                    data[i + 1] = val;
+                    data[i + 2] = val;
+                }
+            }
+
+            ctx.putImageData(imageData, 0, 0);
+            return canvas;
+        }
+
+        // Convert canvas to base64
+        function canvasToBase64(canvas) {
+            return canvas.toDataURL('image/png').split(',')[1];
+        }
+
+        // OCR.space API call
+        async function callOcrSpaceApi(base64Image, language) {
+            const apiKey = getOcrspaceKey();
+            if (!apiKey) {
+                throw new Error('請先設定 OCR.space API Key');
+            }
+
+            const formData = new FormData();
+            formData.append('base64Image', 'data:image/png;base64,' + base64Image);
+            formData.append('language', language);
+            formData.append('isOverlayRequired', 'false');
+            formData.append('detectOrientation', 'true');
+            formData.append('scale', 'true');
+            formData.append('OCREngine', '2'); // Engine 2 is better for Asian languages
+
+            const response = await fetch(OCRSPACE_API_URL, {
+                method: 'POST',
+                headers: {
+                    'apikey': apiKey
+                },
+                body: formData
+            });
+
+            if (!response.ok) {
+                throw new Error(`OCR.space API 錯誤: ${response.status}`);
+            }
+
+            const result = await response.json();
+
+            if (result.IsErroredOnProcessing) {
+                throw new Error(result.ErrorMessage?.[0] || 'OCR 處理失敗');
+            }
+
+            if (!result.ParsedResults || result.ParsedResults.length === 0) {
+                return '';
+            }
+
+            return result.ParsedResults.map(r => r.ParsedText).join('\n').trim();
         }
 
         // Parse page range string
@@ -926,6 +1109,8 @@
             if (!selectedFile) return;
 
             const language = languageSelect.value;
+            const ocrEngine = ocrEngineSelect.value;
+            const preprocessing = preprocessingSelect.value;
             const isPDF = pdfDoc !== null;
             let pagesToProcess = [1];
 
@@ -937,39 +1122,57 @@
                 }
             }
 
+            // Check OCR.space API key
+            if (ocrEngine === 'ocrspace' && !getOcrspaceKey()) {
+                ocrspaceKeySection.style.display = 'block';
+                ocrspaceKeyInput.focus();
+                alert('請先設定 OCR.space API Key');
+                return;
+            }
+
             // Show progress
             progressSection.classList.add('visible');
             actionButtons.style.display = 'none';
             startOcrBtn.disabled = true;
 
-            // Initialize Tesseract worker
-            loadingOverlay.classList.add('visible');
-            loadingText.textContent = '正在載入 OCR 引擎...';
-            loadingSubtext.textContent = `載入 ${language} 語言模型中`;
-
             try {
-                if (!worker) {
-                    worker = await Tesseract.createWorker(language, 1, {
-                        logger: (m) => {
-                            if (m.status === 'loading tesseract core') {
-                                loadingSubtext.textContent = '載入 Tesseract 核心...';
-                            } else if (m.status === 'initializing tesseract') {
-                                loadingSubtext.textContent = '初始化 Tesseract...';
-                            } else if (m.status === 'loading language traineddata') {
-                                loadingSubtext.textContent = `載入 ${language} 語言模型...`;
-                            } else if (m.status === 'initializing api') {
-                                loadingSubtext.textContent = '準備 OCR 引擎...';
-                            }
-                        }
-                    });
-                } else {
-                    await worker.reinitialize(language);
-                }
-
-                loadingOverlay.classList.remove('visible');
-
                 let allText = [];
                 const totalSteps = pagesToProcess.length;
+
+                if (ocrEngine === 'tesseract') {
+                    // Initialize Tesseract worker
+                    loadingOverlay.classList.add('visible');
+                    loadingText.textContent = '正在載入 OCR 引擎...';
+                    const tesseractLang = LANG_MAP_TESSERACT[language] || 'eng';
+                    loadingSubtext.textContent = `載入 ${tesseractLang} 語言模型中`;
+
+                    if (!worker) {
+                        worker = await Tesseract.createWorker(tesseractLang, 1, {
+                            logger: (m) => {
+                                if (m.status === 'loading tesseract core') {
+                                    loadingSubtext.textContent = '載入 Tesseract 核心...';
+                                } else if (m.status === 'initializing tesseract') {
+                                    loadingSubtext.textContent = '初始化 Tesseract...';
+                                } else if (m.status === 'loading language traineddata') {
+                                    loadingSubtext.textContent = `載入 ${tesseractLang} 語言模型...`;
+                                } else if (m.status === 'initializing api') {
+                                    loadingSubtext.textContent = '準備 OCR 引擎...';
+                                }
+                            }
+                        });
+                    } else {
+                        await worker.reinitialize(tesseractLang);
+                    }
+
+                    loadingOverlay.classList.remove('visible');
+                } else {
+                    // OCR.space - show brief loading
+                    loadingOverlay.classList.add('visible');
+                    loadingText.textContent = '準備 OCR.space API...';
+                    loadingSubtext.textContent = '使用雲端 OCR 服務';
+                    await new Promise(r => setTimeout(r, 500));
+                    loadingOverlay.classList.remove('visible');
+                }
 
                 for (let i = 0; i < pagesToProcess.length; i++) {
                     const pageNum = pagesToProcess[i];
@@ -982,15 +1185,15 @@
                         isPDF ? `PDF 頁面 ${pageNum}` : '處理圖片中'
                     );
 
-                    let imageData;
+                    let canvas;
 
                     if (isPDF) {
                         // Render PDF page to canvas
                         const page = await pdfDoc.getPage(pageNum);
-                        const scale = 2.0; // Higher resolution for better OCR
+                        const scale = 2.5; // Higher resolution for better OCR
                         const viewport = page.getViewport({ scale });
 
-                        const canvas = document.createElement('canvas');
+                        canvas = document.createElement('canvas');
                         const context = canvas.getContext('2d');
                         canvas.height = viewport.height;
                         canvas.width = viewport.width;
@@ -999,23 +1202,51 @@
                             canvasContext: context,
                             viewport: viewport
                         }).promise;
-
-                        imageData = canvas;
                     } else {
-                        imageData = selectedFile;
+                        // Load image file to canvas
+                        canvas = document.createElement('canvas');
+                        const ctx = canvas.getContext('2d');
+                        const img = new Image();
+                        await new Promise((resolve, reject) => {
+                            img.onload = resolve;
+                            img.onerror = reject;
+                            img.src = URL.createObjectURL(selectedFile);
+                        });
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                        ctx.drawImage(img, 0, 0);
+                        URL.revokeObjectURL(img.src);
                     }
+
+                    // Apply preprocessing
+                    updateProgress(baseProgress + stepSize * 0.2, null, '圖片預處理中...');
+                    preprocessImage(canvas, preprocessing);
 
                     // Perform OCR
                     updateProgress(baseProgress + stepSize * 0.5, null, `辨識中...`);
-                    const result = await worker.recognize(imageData);
 
-                    const text = result.data.text.trim();
+                    let text = '';
+
+                    if (ocrEngine === 'ocrspace') {
+                        const base64 = canvasToBase64(canvas);
+                        const ocrLang = LANG_MAP_OCRSPACE[language] || 'eng';
+                        text = await callOcrSpaceApi(base64, ocrLang);
+                    } else {
+                        const result = await worker.recognize(canvas);
+                        text = result.data.text.trim();
+                    }
+
                     if (text) {
                         if (isPDF && totalSteps > 1) {
                             allText.push(`=== 第 ${pageNum} 頁 ===\n${text}`);
                         } else {
                             allText.push(text);
                         }
+                    }
+
+                    // Add delay for OCR.space to avoid rate limiting
+                    if (ocrEngine === 'ocrspace' && i < pagesToProcess.length - 1) {
+                        await new Promise(r => setTimeout(r, 1000));
                     }
                 }
 
@@ -1275,6 +1506,38 @@
                 hideApiKeyModal();
             }
         });
+
+        // OCR.space API key events
+        ocrEngineSelect.addEventListener('change', () => {
+            const isOcrspace = ocrEngineSelect.value === 'ocrspace';
+            ocrspaceKeySection.style.display = isOcrspace ? 'block' : 'none';
+        });
+
+        saveOcrspaceKeyBtn.addEventListener('click', () => {
+            const key = ocrspaceKeyInput.value.trim();
+            if (key) {
+                saveOcrspaceKey(key);
+                saveOcrspaceKeyBtn.textContent = '已儲存！';
+                saveOcrspaceKeyBtn.classList.add('copied');
+                setTimeout(() => {
+                    saveOcrspaceKeyBtn.textContent = '儲存';
+                    saveOcrspaceKeyBtn.classList.remove('copied');
+                }, 2000);
+            }
+        });
+
+        // Initialize on load
+        (function init() {
+            // Load saved OCR.space API key
+            const savedOcrspaceKey = getOcrspaceKey();
+            if (savedOcrspaceKey) {
+                ocrspaceKeyInput.value = savedOcrspaceKey;
+            }
+
+            // Show/hide OCR.space key section based on selected engine
+            const isOcrspace = ocrEngineSelect.value === 'ocrspace';
+            ocrspaceKeySection.style.display = isOcrspace ? 'block' : 'none';
+        })();
     </script>
 </body>
 </html>
