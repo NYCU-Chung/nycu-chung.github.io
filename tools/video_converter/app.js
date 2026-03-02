@@ -4,7 +4,7 @@
  */
 
 // API 端點
-const API_BASE = 'http://158.179.180.219';
+const API_BASE = 'https://video-converter.duckdns.org';
 
 const SIZE_THRESHOLDS = {
     WARN: 100 * 1024 * 1024,      // 100MB
