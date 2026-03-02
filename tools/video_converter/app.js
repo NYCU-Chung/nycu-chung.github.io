@@ -3,8 +3,8 @@
  * 使用後端 API 進行轉換
  */
 
-// API 端點 - 部署後改成你的網域
-const API_BASE = 'https://YOUR_API_DOMAIN.com';  // TODO: 改成你的 API 網域
+// API 端點
+const API_BASE = 'http://158.179.180.219';
 
 const SIZE_THRESHOLDS = {
     WARN: 100 * 1024 * 1024,      // 100MB
