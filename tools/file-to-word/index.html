@@ -988,10 +988,19 @@
             return resizedCanvas.toDataURL('image/jpeg', 0.8).split(',')[1];
         }
 
-        // PaddleOCR API call
+        // PaddleOCR API call - using file upload for reliability
         async function callPaddleOcrApi(base64Image) {
+            // Convert base64 to Blob
+            const binaryString = atob(base64Image);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            const blob = new Blob([bytes], { type: 'image/jpeg' });
+
+            // Send as file upload
             const formData = new FormData();
-            formData.append('base64_image', 'data:image/jpeg;base64,' + base64Image);
+            formData.append('image', blob, 'image.jpg');
 
             const response = await fetch(PADDLEOCR_API_URL, {
                 method: 'POST',
@@ -999,7 +1008,8 @@
             });
 
             if (!response.ok) {
-                throw new Error(`PaddleOCR API 錯誤: ${response.status}`);
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || `PaddleOCR API 錯誤: ${response.status}`);
             }
 
             const result = await response.json();
