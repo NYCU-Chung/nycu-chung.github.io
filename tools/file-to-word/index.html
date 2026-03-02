@@ -759,7 +759,7 @@
         const clearBtn = document.getElementById('clearBtn');
 
         const polishSection = document.getElementById('polishSection');
-        const polishText = document.getElementById('polishText');
+        const polishTextEl = document.getElementById('polishText');
         const copyPolishBtn = document.getElementById('copyPolishBtn');
         const downloadPolishBtn = document.getElementById('downloadPolishBtn');
 
@@ -1090,7 +1090,7 @@
                 const data = await response.json();
                 const polishedText = data.choices[0]?.message?.content?.trim() || '';
 
-                polishText.textContent = polishedText;
+                polishTextEl.textContent = polishedText;
                 polishSection.classList.add('visible');
 
             } catch (error) {
@@ -1190,7 +1190,7 @@
         });
 
         copyBtn.addEventListener('click', () => copyToClipboard(resultText.textContent, copyBtn));
-        copyPolishBtn.addEventListener('click', () => copyToClipboard(polishText.textContent, copyPolishBtn));
+        copyPolishBtn.addEventListener('click', () => copyToClipboard(polishTextEl.textContent, copyPolishBtn));
 
         downloadBtn.addEventListener('click', () => {
             const baseName = selectedFile ? selectedFile.name.replace(/\.[^.]+$/, '') : 'ocr_result';
@@ -1199,7 +1199,7 @@
 
         downloadPolishBtn.addEventListener('click', () => {
             const baseName = selectedFile ? selectedFile.name.replace(/\.[^.]+$/, '') : 'ocr_result';
-            downloadText(polishText.textContent, `${baseName}_polished.txt`);
+            downloadText(polishTextEl.textContent, `${baseName}_polished.txt`);
         });
 
         polishBtn.addEventListener('click', () => {
@@ -1209,7 +1209,7 @@
 
         clearBtn.addEventListener('click', () => {
             resultText.textContent = '';
-            polishText.textContent = '';
+            polishTextEl.textContent = '';
             resultSection.classList.remove('visible');
             polishSection.classList.remove('visible');
         });
