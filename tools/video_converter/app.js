@@ -5,35 +5,32 @@
 
 // 格式設定
 const FORMAT_CONFIG = {
-    // 影片格式
-    mp4: { type: 'video', codec: '-c:v libx264 -c:a aac', ext: 'mp4' },
-    webm: { type: 'video', codec: '-c:v libvpx-vp9 -c:a libopus', ext: 'webm' },
-    avi: { type: 'video', codec: '-c:v mpeg4 -c:a mp3', ext: 'avi' },
-    mkv: { type: 'video', codec: '-c:v libx264 -c:a aac', ext: 'mkv' },
-    mov: { type: 'video', codec: '-c:v libx264 -c:a aac', ext: 'mov' },
-    gif: { type: 'video', codec: '-vf "fps=10,scale=480:-1:flags=lanczos"', ext: 'gif' },
-    // 音訊格式
-    mp3: { type: 'audio', codec: '-c:a libmp3lame', ext: 'mp3' },
-    wav: { type: 'audio', codec: '-c:a pcm_s16le', ext: 'wav' },
-    aac: { type: 'audio', codec: '-c:a aac', ext: 'aac' },
-    ogg: { type: 'audio', codec: '-c:a libvorbis', ext: 'ogg' },
-    flac: { type: 'audio', codec: '-c:a flac', ext: 'flac' },
-    m4a: { type: 'audio', codec: '-c:a aac', ext: 'm4a' },
+    mp4: { type: 'video', ext: 'mp4' },
+    webm: { type: 'video', ext: 'webm' },
+    avi: { type: 'video', ext: 'avi' },
+    mkv: { type: 'video', ext: 'mkv' },
+    mov: { type: 'video', ext: 'mov' },
+    gif: { type: 'video', ext: 'gif' },
+    mp3: { type: 'audio', ext: 'mp3' },
+    wav: { type: 'audio', ext: 'wav' },
+    aac: { type: 'audio', ext: 'aac' },
+    ogg: { type: 'audio', ext: 'ogg' },
+    flac: { type: 'audio', ext: 'flac' },
+    m4a: { type: 'audio', ext: 'm4a' },
 };
 
 const QUALITY_SETTINGS = {
-    high: { video: '-crf 18 -preset slow', audio: '-b:a 320k' },
-    medium: { video: '-crf 23 -preset medium', audio: '-b:a 192k' },
-    low: { video: '-crf 28 -preset fast', audio: '-b:a 128k' },
+    high: { video: '-crf 18', audio: '-b:a 320k' },
+    medium: { video: '-crf 23', audio: '-b:a 192k' },
+    low: { video: '-crf 28', audio: '-b:a 128k' },
 };
 
-// 狀態
 let ffmpeg = null;
 let currentFile = null;
 let outputBlob = null;
 let outputFileName = null;
+let ffmpegLoaded = false;
 
-// DOM 元素
 const elements = {
     loadingOverlay: document.getElementById('loadingOverlay'),
     dropzone: document.getElementById('dropzone'),
@@ -64,74 +61,31 @@ const elements = {
     retryBtn: document.getElementById('retryBtn'),
 };
 
-// 將遠端 JS 轉為 Blob URL
 async function toBlobURL(url, mimeType) {
     const response = await fetch(url);
-    const blob = new Blob([await response.text()], { type: mimeType });
+    const buf = await response.arrayBuffer();
+    const blob = new Blob([buf], { type: mimeType });
     return URL.createObjectURL(blob);
 }
 
-// 將遠端二進位檔轉為 Blob URL
-async function toBlobURLBinary(url, mimeType) {
-    const response = await fetch(url);
-    const blob = new Blob([await response.arrayBuffer()], { type: mimeType });
-    return URL.createObjectURL(blob);
-}
-
-// 讀取檔案為 Uint8Array
-async function fetchFile(file) {
-    return new Uint8Array(await file.arrayBuffer());
-}
-
-// 初始化 FFmpeg
 async function initFFmpeg() {
     try {
-        const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
-        const ffmpegURL = 'https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd';
+        const { createFFmpeg, fetchFile: ff } = FFmpeg;
+        window.fetchFileUtil = ff;
 
-        // 載入 FFmpeg 類別
-        const classWorkerURL = await toBlobURL(`${ffmpegURL}/814.ffmpeg.js`, 'text/javascript');
-        const classURL = await toBlobURL(`${ffmpegURL}/ffmpeg.js`, 'text/javascript');
-
-        // 動態載入 ffmpeg.js
-        await new Promise((resolve, reject) => {
-            const script = document.createElement('script');
-            script.src = classURL;
-            script.onload = resolve;
-            script.onerror = reject;
-            document.head.appendChild(script);
+        ffmpeg = createFFmpeg({
+            log: true,
+            corePath: 'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js',
         });
 
-        // 等待 FFmpegWASM 可用
-        await new Promise(resolve => setTimeout(resolve, 100));
-
-        const { FFmpeg } = FFmpegWASM;
-        ffmpeg = new FFmpeg();
-
-        ffmpeg.on('log', ({ message }) => {
-            console.log('[FFmpeg]', message);
-        });
-
-        ffmpeg.on('progress', ({ progress, time }) => {
-            const percent = Math.round(progress * 100);
+        ffmpeg.setProgress(({ ratio }) => {
+            const percent = Math.round(ratio * 100);
             elements.progressFill.style.width = `${percent}%`;
             elements.progressText.textContent = `轉換中... ${percent}%`;
-            if (time > 0) {
-                const seconds = Math.round(time / 1000000);
-                elements.progressDetail.textContent = `已處理: ${formatDuration(seconds)}`;
-            }
         });
 
-        // 載入 core
-        const coreURL = await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript');
-        const wasmURL = await toBlobURLBinary(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm');
-
-        await ffmpeg.load({
-            coreURL,
-            wasmURL,
-            workerURL: classWorkerURL,
-        });
-
+        await ffmpeg.load();
+        ffmpegLoaded = true;
         elements.loadingOverlay.classList.add('hidden');
         console.log('FFmpeg loaded successfully');
     } catch (error) {
@@ -147,7 +101,6 @@ async function initFFmpeg() {
     }
 }
 
-// 格式化檔案大小
 function formatFileSize(bytes) {
     if (bytes === 0) return '0 B';
     const k = 1024;
@@ -156,7 +109,6 @@ function formatFileSize(bytes) {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
-// 格式化時間
 function formatDuration(seconds) {
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
@@ -167,7 +119,6 @@ function formatDuration(seconds) {
     return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-// 判斷檔案類型
 function getFileType(file) {
     if (file.type.startsWith('video/')) return 'video';
     if (file.type.startsWith('audio/')) return 'audio';
@@ -177,7 +128,6 @@ function getFileType(file) {
     return 'unknown';
 }
 
-// 處理檔案選擇
 function handleFile(file) {
     const fileType = getFileType(file);
     if (fileType === 'unknown') {
@@ -186,8 +136,6 @@ function handleFile(file) {
     }
 
     currentFile = file;
-
-    // 更新 UI
     elements.fileIcon.textContent = fileType === 'video' ? '📹' : '🎵';
     elements.fileName.textContent = file.name;
     elements.fileMeta.textContent = `${formatFileSize(file.size)} • ${file.type || '未知格式'}`;
@@ -196,7 +144,6 @@ function handleFile(file) {
     elements.fileInfo.classList.remove('hidden');
     elements.convertSection.classList.remove('hidden');
 
-    // 根據檔案類型預選輸出格式
     if (fileType === 'audio') {
         elements.outputFormat.value = 'mp3';
     }
@@ -205,7 +152,6 @@ function handleFile(file) {
     hideDownload();
 }
 
-// 移除檔案
 function removeFile() {
     currentFile = null;
     elements.fileInput.value = '';
@@ -217,31 +163,22 @@ function removeFile() {
     hideError();
 }
 
-// 建構 FFmpeg 命令參數
 function buildFFmpegArgs(inputName, outputName, options) {
     const args = ['-i', inputName];
     const formatConfig = FORMAT_CONFIG[options.format];
     const qualityConfig = QUALITY_SETTINGS[options.quality];
-
     const isOutputAudio = formatConfig.type === 'audio';
     const isExtractAudio = options.extractAudio;
 
     if (isOutputAudio || isExtractAudio) {
-        // 輸出音訊
-        args.push('-vn'); // 移除影片
-
-        const codecParts = formatConfig.codec.split(' ');
-        args.push(...codecParts);
-
+        args.push('-vn');
         if (options.audioBitrate) {
             args.push('-b:a', options.audioBitrate);
         } else {
-            args.push(...qualityConfig.audio.split(' '));
+            args.push('-b:a', qualityConfig.audio.split(' ')[1]);
         }
     } else {
-        // 輸出影片
         if (options.format === 'gif') {
-            // GIF 特殊處理
             let scale = '480:-1';
             if (options.resolution) {
                 const [w] = options.resolution.split('x');
@@ -251,20 +188,16 @@ function buildFFmpegArgs(inputName, outputName, options) {
             args.push('-vf', `fps=${fps},scale=${scale}:flags=lanczos`);
             args.push('-loop', '0');
         } else {
-            // 一般影片
-            const codecParts = formatConfig.codec.split(' ');
-            args.push(...codecParts);
-
-            args.push(...qualityConfig.video.split(' '));
+            args.push('-c:v', 'libx264');
+            args.push('-c:a', 'aac');
+            args.push(qualityConfig.video.split(' ')[0], qualityConfig.video.split(' ')[1]);
 
             if (options.resolution) {
                 args.push('-s', options.resolution);
             }
-
             if (options.fps) {
                 args.push('-r', options.fps);
             }
-
             if (options.audioBitrate) {
                 args.push('-b:a', options.audioBitrate);
             }
@@ -275,9 +208,8 @@ function buildFFmpegArgs(inputName, outputName, options) {
     return args;
 }
 
-// 執行轉換
 async function convert() {
-    if (!currentFile || !ffmpeg) return;
+    if (!currentFile || !ffmpegLoaded) return;
 
     const options = {
         format: elements.outputFormat.value,
@@ -288,7 +220,6 @@ async function convert() {
         extractAudio: elements.extractAudio.checked,
     };
 
-    // 如果勾選提取音訊，強制輸出為音訊格式
     if (options.extractAudio && FORMAT_CONFIG[options.format].type === 'video') {
         options.format = 'mp3';
     }
@@ -300,29 +231,24 @@ async function convert() {
     outputFileName = `${baseName}_converted.${outputExt}`;
     const outputName = `output.${outputExt}`;
 
-    // 顯示進度
     showProgress();
     elements.convertBtn.disabled = true;
     elements.convertBtn.querySelector('.btn-text').classList.add('hidden');
     elements.convertBtn.querySelector('.btn-loading').classList.remove('hidden');
 
     try {
-        // 寫入輸入檔案
         elements.progressText.textContent = '準備檔案...';
-        await ffmpeg.writeFile(inputName, await fetchFile(currentFile));
+        ffmpeg.FS('writeFile', inputName, await window.fetchFileUtil(currentFile));
 
-        // 建構並執行命令
         const args = buildFFmpegArgs(inputName, outputName, options);
         console.log('FFmpeg args:', args.join(' '));
 
         elements.progressText.textContent = '轉換中... 0%';
-        await ffmpeg.exec(args);
+        await ffmpeg.run(...args);
 
-        // 讀取輸出檔案
         elements.progressText.textContent = '完成處理...';
-        const outputData = await ffmpeg.readFile(outputName);
+        const outputData = ffmpeg.FS('readFile', outputName);
 
-        // 建立 Blob
         const mimeTypes = {
             mp4: 'video/mp4',
             webm: 'video/webm',
@@ -340,13 +266,10 @@ async function convert() {
 
         outputBlob = new Blob([outputData.buffer], { type: mimeTypes[outputExt] || 'application/octet-stream' });
 
-        // 清理
-        await ffmpeg.deleteFile(inputName);
-        await ffmpeg.deleteFile(outputName);
+        ffmpeg.FS('unlink', inputName);
+        ffmpeg.FS('unlink', outputName);
 
-        // 顯示下載
         showDownload();
-
     } catch (error) {
         console.error('Conversion failed:', error);
         showError(`轉換失敗: ${error.message}`);
@@ -358,10 +281,8 @@ async function convert() {
     }
 }
 
-// 下載檔案
 function download() {
     if (!outputBlob || !outputFileName) return;
-
     const url = URL.createObjectURL(outputBlob);
     const a = document.createElement('a');
     a.href = url;
@@ -372,7 +293,6 @@ function download() {
     URL.revokeObjectURL(url);
 }
 
-// UI 輔助函數
 function showProgress() {
     elements.progressSection.classList.remove('hidden');
     elements.progressFill.style.width = '0%';
@@ -410,28 +330,23 @@ function resetAll() {
 
 // 事件監聽
 elements.dropzone.addEventListener('click', () => elements.fileInput.click());
-
 elements.dropzone.addEventListener('dragover', (e) => {
     e.preventDefault();
     elements.dropzone.classList.add('dragover');
 });
-
 elements.dropzone.addEventListener('dragleave', () => {
     elements.dropzone.classList.remove('dragover');
 });
-
 elements.dropzone.addEventListener('drop', (e) => {
     e.preventDefault();
     elements.dropzone.classList.remove('dragover');
     const file = e.dataTransfer.files[0];
     if (file) handleFile(file);
 });
-
 elements.fileInput.addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (file) handleFile(file);
 });
-
 elements.removeFile.addEventListener('click', removeFile);
 elements.convertBtn.addEventListener('click', convert);
 elements.downloadBtn.addEventListener('click', download);
@@ -442,8 +357,6 @@ elements.retryBtn.addEventListener('click', () => {
         elements.convertSection.classList.remove('hidden');
     }
 });
-
-// 提取音訊選項變更時自動切換格式
 elements.extractAudio.addEventListener('change', (e) => {
     if (e.target.checked) {
         const currentFormat = elements.outputFormat.value;
