@@ -86,6 +86,7 @@ async function initFFmpeg() {
         });
 
         elements.loadingOverlay.querySelector('p').textContent = '正在載入 FFmpeg 核心...';
+        elements.loadingOverlay.querySelector('.loading-hint').textContent = '首次載入約需 10-20 秒...';
 
         // FFmpeg 類別的 worker (解決 CORS 問題)
         const ffmpegWorkerURL = await toBlobURL(
@@ -93,56 +94,18 @@ async function initFFmpeg() {
             'text/javascript'
         );
 
-        // 檢查是否支援多執行緒 (需要 SharedArrayBuffer)
-        const multiThreadSupported = typeof SharedArrayBuffer !== 'undefined';
-        console.log('Multi-thread support:', multiThreadSupported);
-
-        let loadedWithMT = false;
-
-        // 嘗試載入多執行緒版本，失敗則降級到單執行緒
-        if (multiThreadSupported) {
-            try {
-                const baseURL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core-mt@0.12.6/dist/esm';
-                elements.loadingOverlay.querySelector('.loading-hint').textContent = '嘗試載入多執行緒核心...';
-
-                await ffmpeg.load({
-                    classWorkerURL: ffmpegWorkerURL,
-                    coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-                    wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
-                    workerURL: await toBlobURL(`${baseURL}/ffmpeg-core.worker.js`, 'text/javascript'),
-                });
-                loadedWithMT = true;
-                console.log('Loaded with multi-threaded core');
-            } catch (mtError) {
-                console.warn('Multi-threaded core failed, falling back to single-threaded:', mtError);
-                // 重新建立 FFmpeg 實例
-                ffmpeg = new FFmpeg();
-                ffmpeg.on('progress', ({ progress }) => {
-                    const percent = Math.round(progress * 100);
-                    elements.progressFill.style.width = `${percent}%`;
-                    elements.progressText.textContent = `轉換中... ${percent}%`;
-                });
-                ffmpeg.on('log', ({ message }) => {
-                    console.log('FFmpeg:', message);
-                });
-            }
-        }
-
-        // 如果多執行緒失敗或不支援，使用單執行緒
-        if (!loadedWithMT) {
-            const baseURL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm';
-            elements.loadingOverlay.querySelector('.loading-hint').textContent = '載入單執行緒核心...';
-            await ffmpeg.load({
-                classWorkerURL: ffmpegWorkerURL,
-                coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-                wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
-            });
-            console.log('Loaded with single-threaded core');
-        }
+        // 使用單執行緒版本 - 更穩定，載入更快
+        const baseURL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm';
+        await ffmpeg.load({
+            classWorkerURL: ffmpegWorkerURL,
+            coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+            wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+        });
+        console.log('FFmpeg core loaded');
 
         ffmpegLoaded = true;
         elements.loadingOverlay.classList.add('hidden');
-        console.log('FFmpeg loaded successfully (multi-thread:', multiThreadSupported, ')');
+        console.log('FFmpeg loaded successfully');
     } catch (error) {
         console.error('Failed to load FFmpeg:', error);
         elements.loadingOverlay.innerHTML = `
