@@ -73,10 +73,9 @@ async function initFFmpeg() {
         const { createFFmpeg, fetchFile } = window.FFmpeg;
         window.fetchFileUtil = fetchFile;
 
-        // 使用 0.10.0 核心
+        // 不指定 corePath，讓 library 自動選擇
         ffmpeg = createFFmpeg({
             log: true,
-            corePath: 'https://unpkg.com/@ffmpeg/core@0.10.0/dist/ffmpeg-core.js',
         });
 
         ffmpeg.setProgress(({ ratio }) => {
