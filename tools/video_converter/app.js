@@ -91,11 +91,18 @@ async function initFFmpeg() {
         const multiThreadSupported = typeof SharedArrayBuffer !== 'undefined';
         console.log('Multi-thread support:', multiThreadSupported);
 
+        // FFmpeg 類別的 worker (解決 CORS 問題)
+        const ffmpegWorkerURL = await toBlobURL(
+            'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/esm/worker.js',
+            'text/javascript'
+        );
+
         if (multiThreadSupported) {
             // 使用多執行緒版本 - 更好的效能和記憶體管理
             const baseURL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core-mt@0.12.6/dist/esm';
             elements.loadingOverlay.querySelector('.loading-hint').textContent = '載入多執行緒核心...';
             await ffmpeg.load({
+                classWorkerURL: ffmpegWorkerURL,
                 coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
                 wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
                 workerURL: await toBlobURL(`${baseURL}/ffmpeg-core.worker.js`, 'text/javascript'),
@@ -105,6 +112,7 @@ async function initFFmpeg() {
             const baseURL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm';
             elements.loadingOverlay.querySelector('.loading-hint').textContent = '載入單執行緒核心...';
             await ffmpeg.load({
+                classWorkerURL: ffmpegWorkerURL,
                 coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
                 wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
             });
