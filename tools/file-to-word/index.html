@@ -596,7 +596,8 @@
                 <div class="setting-group">
                     <label for="ocrEngine">OCR 引擎</label>
                     <select id="ocrEngine">
-                        <option value="ocrspace" selected>OCR.space (推薦，免費 API)</option>
+                        <option value="paddleocr" selected>PaddleOCR (推薦，中文最強)</option>
+                        <option value="ocrspace">OCR.space (免費 API)</option>
                         <option value="tesseract">Tesseract.js (本地)</option>
                     </select>
                 </div>
@@ -819,6 +820,7 @@
 
         const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
         const OCRSPACE_API_URL = 'https://api.ocr.space/parse/image';
+        const PADDLEOCR_API_URL = 'https://161-33-176-123.sslip.io/ocr';
         const STORAGE_KEY = 'groq_api_key';
         const OCRSPACE_KEY = 'ocrspace_api_key';
 
@@ -984,6 +986,29 @@
             ctx.drawImage(canvas, 0, 0, resizedCanvas.width, resizedCanvas.height);
 
             return resizedCanvas.toDataURL('image/jpeg', 0.8).split(',')[1];
+        }
+
+        // PaddleOCR API call
+        async function callPaddleOcrApi(base64Image) {
+            const formData = new FormData();
+            formData.append('base64_image', 'data:image/jpeg;base64,' + base64Image);
+
+            const response = await fetch(PADDLEOCR_API_URL, {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) {
+                throw new Error(`PaddleOCR API 錯誤: ${response.status}`);
+            }
+
+            const result = await response.json();
+
+            if (!result.success) {
+                throw new Error(result.error || 'OCR 處理失敗');
+            }
+
+            return result.text || '';
         }
 
         // OCR.space API call
@@ -1196,6 +1221,13 @@
                     }
 
                     loadingOverlay.classList.remove('visible');
+                } else if (ocrEngine === 'paddleocr') {
+                    // PaddleOCR - show brief loading
+                    loadingOverlay.classList.add('visible');
+                    loadingText.textContent = '連接 PaddleOCR API...';
+                    loadingSubtext.textContent = '使用深度學習 OCR 引擎';
+                    await new Promise(r => setTimeout(r, 500));
+                    loadingOverlay.classList.remove('visible');
                 } else {
                     // OCR.space - show brief loading
                     loadingOverlay.classList.add('visible');
@@ -1258,7 +1290,10 @@
 
                     let text = '';
 
-                    if (ocrEngine === 'ocrspace') {
+                    if (ocrEngine === 'paddleocr') {
+                        const base64 = canvasToBase64(canvas);
+                        text = await callPaddleOcrApi(base64);
+                    } else if (ocrEngine === 'ocrspace') {
                         const base64 = canvasToBase64(canvas);
                         const ocrLang = LANG_MAP_OCRSPACE[language] || 'eng';
                         text = await callOcrSpaceApi(base64, ocrLang);
