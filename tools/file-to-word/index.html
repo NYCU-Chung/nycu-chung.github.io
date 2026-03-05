@@ -596,7 +596,8 @@
                 <div class="setting-group">
                     <label for="ocrEngine">OCR 引擎</label>
                     <select id="ocrEngine">
-                        <option value="paddleocr" selected>PaddleOCR (推薦，中文最強)</option>
+                        <option value="gemini" selected>Gemini Vision (推薦，最精準)</option>
+                        <option value="paddleocr">PaddleOCR (中文最強)</option>
                         <option value="ocrspace">OCR.space (免費 API)</option>
                         <option value="tesseract">Tesseract.js (本地)</option>
                     </select>
@@ -695,17 +696,17 @@
             </div>
         </div>
 
-        <!-- API Key Modal -->
+        <!-- API Key Modal (for polish - uses Gemini) -->
         <div class="modal-overlay" id="apiKeyModal">
             <div class="modal">
                 <div class="modal-header">
-                    <h3>🔑 設定 Groq API Key</h3>
+                    <h3>🔑 設定 Gemini API Key</h3>
                     <button class="modal-close" id="closeModal">&times;</button>
                 </div>
                 <div class="modal-body">
-                    <p>請輸入您的 Groq API Key 以使用文字潤飾功能。</p>
-                    <p><a href="https://console.groq.com/keys" target="_blank">點此免費取得 API Key →</a></p>
-                    <input type="password" id="apiKeyInput" placeholder="gsk_xxxxxxxxxxxxxxxx" autocomplete="off">
+                    <p>請輸入您的 Gemini API Key 以使用文字潤飾功能。</p>
+                    <p><a href="https://aistudio.google.com/app/apikey" target="_blank">點此免費取得 API Key →</a></p>
+                    <input type="password" id="apiKeyInput" placeholder="AIza..." autocomplete="off">
                     <label class="checkbox-label">
                         <input type="checkbox" id="saveApiKey" checked>
                         記住 API Key（儲存於瀏覽器）
@@ -715,6 +716,29 @@
                     <button class="btn-secondary" id="cancelApiKey">取消</button>
                     <button class="btn-primary" id="confirmApiKey">確認</button>
                 </div>
+            </div>
+        </div>
+
+        <!-- Gemini API Key Section -->
+        <div class="card" id="geminiKeySection">
+            <div class="setting-group" style="margin-bottom: 0.75rem;">
+                <label for="geminiKeyInput">Gemini API Key (必填)</label>
+                <div style="display: flex; gap: 0.5rem;">
+                    <input type="password" id="geminiKeyInput" placeholder="輸入 API Key..." style="flex: 1; background: var(--bg-input); color: var(--text); border: 1px solid var(--border); border-radius: 0.5rem; padding: 0.75rem;">
+                    <button class="btn-small" id="saveGeminiKey">儲存</button>
+                </div>
+                <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">
+                    <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color: var(--primary);">點此免費取得 API Key</a>
+                    (免費版每分鐘 15 次)
+                </small>
+            </div>
+            <div class="setting-group" style="margin-bottom: 0;">
+                <label for="geminiModel">Gemini 模型</label>
+                <select id="geminiModel" style="background: var(--bg-input); color: var(--text); border: 1px solid var(--border); border-radius: 0.5rem; padding: 0.75rem;">
+                    <option value="gemini-2.5-flash" selected>Gemini 2.5 Flash (快速)</option>
+                    <option value="gemini-2.5-pro">Gemini 2.5 Pro (精準)</option>
+                    <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                </select>
             </div>
         </div>
 
@@ -734,10 +758,11 @@
         </div>
 
         <p class="info">
-            由 <a href="https://ocr.space/OCRAPI" target="_blank">OCR.space</a>、
+            由 <a href="https://ai.google.dev/" target="_blank">Gemini Vision</a>、
+            <a href="https://ocr.space/OCRAPI" target="_blank">OCR.space</a>、
             <a href="https://tesseract.projectnaptha.com/" target="_blank">Tesseract.js</a>
             與 <a href="https://mozilla.github.io/pdf.js/" target="_blank">PDF.js</a> 驅動<br>
-            使用 OCR.space 需上傳圖片至 API；Tesseract.js 完全在本地處理
+            Gemini Vision 提供高精度中文 OCR；Tesseract.js 完全在本地處理
         </p>
     </div>
 
@@ -775,6 +800,10 @@
         const ocrspaceKeySection = document.getElementById('ocrspaceKeySection');
         const ocrspaceKeyInput = document.getElementById('ocrspaceKeyInput');
         const saveOcrspaceKeyBtn = document.getElementById('saveOcrspaceKey');
+        const geminiKeySection = document.getElementById('geminiKeySection');
+        const geminiKeyInput = document.getElementById('geminiKeyInput');
+        const saveGeminiKeyBtn = document.getElementById('saveGeminiKey');
+        const geminiModelSelect = document.getElementById('geminiModel');
 
         const previewSection = document.getElementById('previewSection');
         const previewContainer = document.getElementById('previewContainer');
@@ -818,11 +847,24 @@
         let totalPages = 1;
         let worker = null;
 
-        const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
+        const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
         const OCRSPACE_API_URL = 'https://api.ocr.space/parse/image';
         const PADDLEOCR_API_URL = 'https://161-33-176-123.sslip.io/ocr';
-        const STORAGE_KEY = 'groq_api_key';
+        const STORAGE_KEY = 'gemini_api_key';
         const OCRSPACE_KEY = 'ocrspace_api_key';
+        const GEMINI_MODEL_KEY = 'gemini_model';
+
+        // OCR Prompt for Gemini Vision (optimized for Traditional Chinese academic papers)
+        const GEMINI_OCR_PROMPT = `請完整識別這張繁體中文學術論文頁面的所有文字。
+
+重要要求：
+1. 完整識別頁面上的所有正文、腳註、頁碼
+2. 不要添加任何格式標記（如「頁眉」「正文」等標籤）
+3. 不要添加 markdown 格式（如 ** 粗體）
+4. 忽略水印和圖書館印章
+5. 按閱讀順序輸出文字
+
+直接輸出識別的純文字：`;
 
         // Language code mapping for different engines
         const LANG_MAP_TESSERACT = {
@@ -880,6 +922,81 @@
 
         function saveOcrspaceKey(key) {
             localStorage.setItem(OCRSPACE_KEY, key);
+        }
+
+        // Gemini API key functions
+        function getGeminiKey() {
+            return localStorage.getItem(STORAGE_KEY) || '';
+        }
+
+        function saveGeminiKeyToStorage(key) {
+            localStorage.setItem(STORAGE_KEY, key);
+        }
+
+        function getGeminiModel() {
+            return localStorage.getItem(GEMINI_MODEL_KEY) || 'gemini-2.5-flash';
+        }
+
+        function saveGeminiModel(model) {
+            localStorage.setItem(GEMINI_MODEL_KEY, model);
+        }
+
+        // Gemini Vision OCR API call
+        async function callGeminiOcrApi(base64Image, retryCount = 0) {
+            const apiKey = getGeminiKey();
+            if (!apiKey) {
+                throw new Error('請先設定 Gemini API Key');
+            }
+
+            const model = geminiModelSelect.value || getGeminiModel();
+            const maxRetries = 3;
+
+            // Detect MIME type from base64
+            const isJpeg = base64Image.startsWith('/9j/');
+            const mimeType = isJpeg ? 'image/jpeg' : 'image/png';
+
+            const url = `${GEMINI_API_URL}/${model}:generateContent?key=${apiKey}`;
+
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    contents: [{
+                        parts: [
+                            {
+                                inline_data: {
+                                    mime_type: mimeType,
+                                    data: base64Image
+                                }
+                            },
+                            {
+                                text: GEMINI_OCR_PROMPT
+                            }
+                        ]
+                    }],
+                    generationConfig: {
+                        temperature: 0.0
+                    }
+                })
+            });
+
+            // Handle rate limiting (429)
+            if (response.status === 429 && retryCount < maxRetries) {
+                const waitTime = 10000 + (retryCount * 5000); // 10s, 15s, 20s
+                console.log(`Rate limit hit, waiting ${waitTime/1000}s before retry ${retryCount + 1}/${maxRetries}...`);
+                await new Promise(r => setTimeout(r, waitTime));
+                return callGeminiOcrApi(base64Image, retryCount + 1);
+            }
+
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({}));
+                throw new Error(error.error?.message || `Gemini API 錯誤: ${response.status}`);
+            }
+
+            const data = await response.json();
+            return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
         }
 
         // Image preprocessing function
@@ -1309,7 +1426,19 @@
                     }
                 }
 
-                if (ocrEngine === 'tesseract') {
+                if (ocrEngine === 'gemini') {
+                    // Gemini Vision - check API key first
+                    if (!getGeminiKey()) {
+                        geminiKeySection.style.display = 'block';
+                        geminiKeyInput.focus();
+                        throw new Error('請先設定 Gemini API Key');
+                    }
+                    loadingOverlay.classList.add('visible');
+                    loadingText.textContent = '連接 Gemini Vision API...';
+                    loadingSubtext.textContent = '使用 Google AI 進行高精度 OCR';
+                    await new Promise(r => setTimeout(r, 300));
+                    loadingOverlay.classList.remove('visible');
+                } else if (ocrEngine === 'tesseract') {
                     // Initialize Tesseract worker
                     loadingOverlay.classList.add('visible');
                     loadingText.textContent = '正在載入 OCR 引擎...';
@@ -1404,7 +1533,10 @@
 
                     let text = '';
 
-                    if (ocrEngine === 'paddleocr') {
+                    if (ocrEngine === 'gemini') {
+                        const base64 = canvasToBase64(canvas, 4000); // Larger limit for Gemini
+                        text = await callGeminiOcrApi(base64);
+                    } else if (ocrEngine === 'paddleocr') {
                         const base64 = canvasToBase64(canvas);
                         text = await callPaddleOcrApi(base64);
                     } else if (ocrEngine === 'ocrspace') {
@@ -1472,39 +1604,34 @@
             return chunks;
         }
 
-        // Call Groq API for a single chunk with retry logic
+        // Call Gemini API for text polishing with retry logic
         async function polishChunk(text, apiKey, retryCount = 0) {
             const maxRetries = 3;
+            const model = geminiModelSelect.value || getGeminiModel();
+            const url = `${GEMINI_API_URL}/${model}:generateContent?key=${apiKey}`;
 
-            const response = await fetch(GROQ_API_URL, {
+            const systemPrompt = '你是一個專業的繁體中文文字校對助手。以下是從掃描文件 OCR 辨識出的文字，可能包含辨識錯誤。請修正明顯的 OCR 錯誤，包括錯字、漏字、多餘字符，並整理成通順易讀的段落。保持原文意思，不要添加額外內容。直接輸出修正後的文字，不需要任何解釋。';
+
+            const response = await fetch(url, {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${apiKey}`
+                    'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    model: 'llama-3.3-70b-versatile',
-                    messages: [
-                        {
-                            role: 'system',
-                            content: '你是一個專業的繁體中文文字校對助手。以下是從掃描文件 OCR 辨識出的文字，可能包含辨識錯誤。請修正明顯的 OCR 錯誤，包括錯字、漏字、多餘字符，並整理成通順易讀的段落。保持原文意思，不要添加額外內容。直接輸出修正後的文字，不需要任何解釋。'
-                        },
-                        {
-                            role: 'user',
-                            content: text
-                        }
-                    ],
-                    temperature: 0.2,
-                    max_tokens: 4096
+                    contents: [{
+                        parts: [
+                            { text: systemPrompt + '\n\n' + text }
+                        ]
+                    }],
+                    generationConfig: {
+                        temperature: 0.2
+                    }
                 })
             });
 
             // Handle rate limiting (429)
             if (response.status === 429 && retryCount < maxRetries) {
-                const errorData = await response.json().catch(() => ({}));
-                // Extract wait time from error message, default to 15 seconds
-                const waitMatch = errorData.error?.message?.match(/try again in ([\d.]+)s/);
-                const waitTime = waitMatch ? Math.ceil(parseFloat(waitMatch[1]) * 1000) + 1000 : 15000;
+                const waitTime = 10000 + (retryCount * 5000); // 10s, 15s, 20s
                 console.log(`Rate limit hit, waiting ${waitTime/1000}s before retry ${retryCount + 1}/${maxRetries}...`);
                 await new Promise(r => setTimeout(r, waitTime));
                 return polishChunk(text, apiKey, retryCount + 1);
@@ -1512,16 +1639,16 @@
 
             if (!response.ok) {
                 const error = await response.json().catch(() => ({}));
-                throw new Error(error.error?.message || `API 錯誤: ${response.status}`);
+                throw new Error(error.error?.message || `Gemini API 錯誤: ${response.status}`);
             }
 
             const data = await response.json();
-            return data.choices[0]?.message?.content?.trim() || '';
+            return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
         }
 
-        // Groq API for polishing (with chunking for large text)
+        // Gemini API for polishing (with chunking for large text)
         async function polishText(text) {
-            const apiKey = getApiKey();
+            const apiKey = getGeminiKey();
             if (!apiKey) {
                 showApiKeyModal();
                 return;
@@ -1701,10 +1828,30 @@
             }
         });
 
-        // OCR.space API key events
+        // OCR engine change - show/hide API key sections
         ocrEngineSelect.addEventListener('change', () => {
-            const isOcrspace = ocrEngineSelect.value === 'ocrspace';
-            ocrspaceKeySection.style.display = isOcrspace ? 'block' : 'none';
+            const engine = ocrEngineSelect.value;
+            geminiKeySection.style.display = engine === 'gemini' ? 'block' : 'none';
+            ocrspaceKeySection.style.display = engine === 'ocrspace' ? 'block' : 'none';
+        });
+
+        // Gemini API key save button
+        saveGeminiKeyBtn.addEventListener('click', () => {
+            const key = geminiKeyInput.value.trim();
+            if (key) {
+                saveGeminiKeyToStorage(key);
+                saveGeminiKeyBtn.textContent = '已儲存！';
+                saveGeminiKeyBtn.classList.add('copied');
+                setTimeout(() => {
+                    saveGeminiKeyBtn.textContent = '儲存';
+                    saveGeminiKeyBtn.classList.remove('copied');
+                }, 2000);
+            }
+        });
+
+        // Gemini model change - save to storage
+        geminiModelSelect.addEventListener('change', () => {
+            saveGeminiModel(geminiModelSelect.value);
         });
 
         saveOcrspaceKeyBtn.addEventListener('click', () => {
@@ -1722,15 +1869,26 @@
 
         // Initialize on load
         (function init() {
+            // Load saved Gemini API key and model
+            const savedGeminiKey = getGeminiKey();
+            if (savedGeminiKey) {
+                geminiKeyInput.value = savedGeminiKey;
+            }
+            const savedGeminiModel = getGeminiModel();
+            if (savedGeminiModel) {
+                geminiModelSelect.value = savedGeminiModel;
+            }
+
             // Load saved OCR.space API key
             const savedOcrspaceKey = getOcrspaceKey();
             if (savedOcrspaceKey) {
                 ocrspaceKeyInput.value = savedOcrspaceKey;
             }
 
-            // Show/hide OCR.space key section based on selected engine
-            const isOcrspace = ocrEngineSelect.value === 'ocrspace';
-            ocrspaceKeySection.style.display = isOcrspace ? 'block' : 'none';
+            // Show/hide API key sections based on selected engine
+            const engine = ocrEngineSelect.value;
+            geminiKeySection.style.display = engine === 'gemini' ? 'block' : 'none';
+            ocrspaceKeySection.style.display = engine === 'ocrspace' ? 'block' : 'none';
         })();
     </script>
 </body>
