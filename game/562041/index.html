@@ -45,46 +45,39 @@
     firebase.initializeApp(window.FIREBASE_CONFIG);
     const db = firebase.database();
 
-    // 依據來源資料設計的 21 張字卡數據 [1][2][3][4]
-    const cards = [
-        {"group": 1, "text": "Amazing applications", "type": "Main"},
-        {"group": 1, "text": "Remember: 2,000 free games", "type": "Focus"},
-        {"group": 1, "text": "Data: 30 apps; Over 2,000 free downloads", "type": "Body"},
-        {"group": 2, "text": "Long battery life", "type": "Main"},
-        {"group": 2, "text": "Remember: 100 hours per charge", "type": "Focus"},
-        {"group": 2, "text": "Data: 100 hours between charges; 3-year guarantee", "type": "Body"},
-        {"group": 3, "text": "Easy to play", "type": "Main"},
-        {"group": 3, "text": "Remember: Always in tune!", "type": "Focus"},
-        {"group": 3, "text": "Data: Automatic tuning; Light body", "type": "Body"},
-        {"group": 4, "text": "Flexible sound", "type": "Main"},
-        {"group": 4, "text": "From mellow acoustic to heavy metal thunder!", "type": "Focus"},
-        {"group": 4, "text": "Data: Built-in synthesizer; 6-tone settings", "type": "Body"},
-        {"group": 5, "text": "Getting the car ready", "type": "Main"},
-        {"group": 5, "text": "Don't forget: tires last twice as long", "type": "Focus"},
-        {"group": 5, "text": "Data: Set emergency brake; Block other tires", "type": "Body"},
-        {"group": 6, "text": "Powerful engine", "type": "Main"},
-        {"group": 6, "text": "Don't forget: it has 2000 cc", "type": "Focus"},
-        {"group": 6, "text": "Data: 2000 cc capacity; Engine power details", "type": "Body"},
-        {"group": 7, "text": "About the sights", "type": "Main"},
-        {"group": 7, "text": "Remember: mountains are most beautiful in fall", "type": "Focus"},
-        {"group": 7, "text": "Data: Northernmost city; Describe where it is", "type": "Body"}
+    // 題庫：7 組，每組 3 張 (Main / Focus / Body)
+    const groups = [
+        { main: "Amazing applications", focus: "Remember: 2,000 free games", body: "Data: 30 apps; Over 2,000 free downloads" },
+        { main: "Long battery life", focus: "Remember: 100 hours per charge", body: "Data: 100 hours between charges; 3-year guarantee" },
+        { main: "Easy to play", focus: "Remember: Always in tune!", body: "Data: Automatic tuning; Light body" },
+        { main: "Flexible sound", focus: "From mellow acoustic to heavy metal thunder!", body: "Data: Built-in synthesizer; 6-tone settings" },
+        { main: "Getting the car ready", focus: "Don't forget: tires last twice as long", body: "Data: Set emergency brake; Block other tires" },
+        { main: "Powerful engine", focus: "Don't forget: it has 2000 cc", body: "Data: 2000 cc capacity; Engine power details" },
+        { main: "About the sights", focus: "Remember: mountains are most beautiful in fall", body: "Data: Northernmost city; Describe where it is" }
     ];
 
-    // 先到先得邏輯：使用 Transaction 確保序號不重複
+    // 從 Firebase 讀取已打亂的卡片，再用 transaction 分配
     const indexRef = db.ref('current_index');
-    indexRef.transaction((currentValue) => {
-        return (currentValue || 0) + 1;
-    }, (error, committed, snapshot) => {
-        if (committed) {
-            const index = snapshot.val() - 1;
-            if (index < cards.length) {
-                displayCard(cards[index]);
-            } else {
-                document.getElementById('loading').innerText = "名額已滿，請觀察其他組別互動！";
-            }
-        } else {
-            document.getElementById('loading').innerText = "連線失敗，請重新掃碼。";
+    const cardsRef = db.ref('shuffled_cards');
+
+    cardsRef.once('value').then(snap => {
+        const shuffled = snap.val();
+        if (!shuffled || shuffled.length === 0) {
+            document.getElementById('loading').innerText = "遊戲尚未開始，請等老師重置抽籤。";
+            return;
         }
+        indexRef.transaction(v => (v || 0) + 1, (error, committed, snapshot) => {
+            if (committed) {
+                const index = snapshot.val() - 1;
+                if (index < shuffled.length) {
+                    displayCard(shuffled[index]);
+                } else {
+                    document.getElementById('loading').innerText = "名額已滿，請觀察其他組別互動！";
+                }
+            } else {
+                document.getElementById('loading').innerText = "連線失敗，請重新掃碼。";
+            }
+        });
     });
 
     async function sha256(text) {
@@ -93,17 +86,43 @@
         return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
     }
 
+    function shuffle(arr) {
+        for (let i = arr.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+        return arr;
+    }
+
     async function resetGame() {
         const pwd = prompt("請輸入管理密碼：");
         if (!pwd) return;
         const hash = await sha256(pwd);
         const snap = await db.ref('admin_password_hash').once('value');
-        if (hash === snap.val()) {
-            await indexRef.set(0);
-            location.reload();
-        } else {
-            alert("密碼錯誤！");
+        if (hash !== snap.val()) { alert("密碼錯誤！"); return; }
+
+        const countStr = prompt("請輸入遊戲人數（須為 3 的倍數，最多 21）：", "21");
+        if (!countStr) return;
+        const count = parseInt(countStr);
+        if (isNaN(count) || count % 3 !== 0 || count < 3 || count > 21) {
+            alert("請輸入 3 的倍數（3~21）！");
+            return;
         }
+
+        // 隨機選組、打亂卡片，存入 Firebase
+        const picked = shuffle([...groups]).slice(0, count / 3);
+        let cards = [];
+        picked.forEach((g, i) => {
+            cards.push({ type: "Main", text: g.main, group: i + 1 });
+            cards.push({ type: "Focus", text: g.focus, group: i + 1 });
+            cards.push({ type: "Body", text: g.body, group: i + 1 });
+        });
+        shuffle(cards);
+
+        await cardsRef.set(cards);
+        await indexRef.set(0);
+        alert("已重置！共 " + count + " 張卡片（" + (count / 3) + " 組）");
+        location.reload();
     }
 
     function displayCard(cardData) {
