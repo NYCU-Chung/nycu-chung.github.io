@@ -2,94 +2,116 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>簡報結論互動遊戲 - 尋找你的結論夥伴</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>結論互動遊戲：尋找你的夥伴</title>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     <style>
-        body { font-family: sans-serif; background-color: #f0f2f5; padding: 20px; text-align: center; }
-        .container { max-width: 800px; margin: auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        h1 { color: #1a73e8; }
-        .input-group { margin: 20px 0; }
-        input { padding: 10px; font-size: 16px; width: 100px; border: 1px solid #ccc; border-radius: 4px; }
-        button { padding: 10px 20px; font-size: 16px; background-color: #1a73e8; color: white; border: none; border-radius: 4px; cursor: pointer; }
-        button:hover { background-color: #1557b0; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; margin-top: 30px; }
-        .card { padding: 20px; border: 2px solid #e0e0e0; border-radius: 8px; background: #fafafa; min-height: 120px; display: flex; flex-direction: column; justify-content: center; }
-        .card-type { font-weight: bold; font-size: 12px; text-transform: uppercase; margin-bottom: 10px; color: #5f6368; }
-        .Main { border-top: 5px solid #4285f4; }
-        .Focus { border-top: 5px solid #34a853; }
-        .Body { border-top: 5px solid #fbbc05; }
-        .instruction { margin-top: 20px; font-size: 14px; color: #666; text-align: left; background: #fffde7; padding: 15px; border-radius: 8px; }
+        body { font-family: sans-serif; background-color: #f0f2f5; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+        .card-container { background: white; padding: 30px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); width: 90%; max-width: 400px; text-align: center; }
+        .status { color: #666; font-style: italic; }
+        .card { display: none; padding: 20px; border-radius: 15px; margin-top: 20px; border-top: 10px solid; }
+        /* 根據來源資料結構設計的卡片顏色 */
+        .Main { background: #e8f0fe; border-color: #4285f4; } /* 主點：重複引言內容 */
+        .Focus { background: #e6f4ea; border-color: #34a853; } /* 焦點：強調正文數據 */
+        .Body { background: #fef7e0; border-color: #fbbc05; } /* 原文：正文細節 */
+        .type-tag { font-size: 0.8em; font-weight: bold; text-transform: uppercase; color: #555; margin-bottom: 10px; display: block; }
+        .text-content { font-size: 1.4em; font-weight: bold; color: #222; margin-bottom: 20px; }
+        .instruction { text-align: left; font-size: 0.9em; line-height: 1.5; color: #444; background: #fff; padding: 15px; border-radius: 10px; border: 1px solid #ddd; }
+        b { color: #d93025; }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <h1>Conclusion Matching Game</h1>
-    <p>根據來源資料設計：將主點、焦點與原文細節配對</p>
+<div class="card-container">
+    <div id="loading" class="status">正在連線至 Firebase 並分配角色...</div>
 
-    <div class="input-group">
-        <label>請輸入班級人數 (3的倍數): </label>
-        <input type="number" id="studentCount" value="18" step="3" min="3">
-        <button onclick="generateGame()">產生隨機字卡</button>
-    </div>
+    <div id="gameCard" class="card">
+        <span id="typeTag" class="type-tag"></span>
+        <div id="textContent" class="text-content"></div>
 
-    <div id="gameBoard" class="grid"></div>
-
-    <div class="instruction">
-        <strong>遊戲規則 (依據來源資料設計)：</strong>
-        <ul>
-            <li>每人隨機分配一張卡片。</li>
-            <li><strong>目標：</strong> 三人一組（一個<b>Main Point</b> + 一個<b>Focus Point</b> + 一個<b>Body</b>）。</li>
-            <li><strong>配對關鍵：</strong> Focus Point 的數據（如 2,000 或 100）必須能在 Body 中找到 [1, 2]。</li>
-            <li><strong>口說任務：</strong> 找到組員後，請使用<b>過去式</b>練習說出結論句 [3]：<br>
-                <i>"I talked about [Main Point]. Please remember [Focus Point]."</i>
-            </li>
-        </ul>
+        <div class="instruction">
+            <strong>任務指派：</strong><br>
+            1. 尋找與你 <b>Group ID</b> 相同的兩位夥伴。<br>
+            2. 找到後，請練習使用 <b>過去式 (Past Tense)</b> 對話 [5]：<br>
+            - 主點者：<i>"I <b>talked</b> about..."</i><br>
+            - 焦點者：<i>"Please <b>remember</b>..."</i> [5]
+        </div>
+        <p>你的群組編號：<span id="groupId" style="font-weight:bold;"></span></p>
     </div>
 </div>
 
 <script>
-    const database = [
-        { main: "Amazing applications", focus: "Remember: 2,000 free games", body: "Has 30 apps; Over 2,000 free downloadable games" },
-        { main: "Long battery life", focus: "Remember: 100 hours per charge", body: "100 hours between charges; 3-year guarantee" },
-        { main: "Easy to play", focus: "Remember: Always in tune!", body: "Automatic tuning; Long, wide neck; Light body" },
-        { main: "Flexible sound", focus: "From mellow acoustic to heavy metal thunder!", body: "Built-in synthesizer; 6-tone settings" },
-        { main: "Getting the car ready", focus: "Don't forget: tires last twice as long", body: "Set emergency brake; Block the other tires" },
-        { main: "About the sights", focus: "Remember: mountains are most beautiful in fall", body: "Northernmost city; Describing where it is" },
-        { main: "Powerful engine", focus: "Don't forget: it has 2000 cc", body: "I told you about how powerful the engine is; 2000 cc capacity" },
-        { main: "Speed of combination", focus: "You can reach 200 km per hour", body: "I talked about the speed of this combination" },
-        { main: "Easy interface", focus: "Remember: Touchscreen typing", body: "Large 4-inch screen; Rightway Technology" },
-        { main: "E-guitar Style", focus: "Remember: Your choice of shape and color!", body: "4 different body shapes; 10 different colors" }
+    // Firebase 配置
+    const firebaseConfig = {
+        apiKey: "AIzaSyC6WDL7PtknwJZ3eePVY1z_uqJhUl0YKoM",
+        authDomain: "presentation-game-22d88.firebaseapp.com",
+        databaseURL: "https://presentation-game-22d88-default-rtdb.asia-southeast1.firebasedatabase.app",
+        projectId: "presentation-game-22d88",
+        storageBucket: "presentation-game-22d88.firebasestorage.app",
+        messagingSenderId: "530826202647",
+        appId: "1:530826202647:web:432de9f8195a3764b0d652"
+    };
+
+    // 初始化 Firebase
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    // 依據來源資料設計的 21 張字卡數據 [1][2][3][4]
+    const cards = [
+        {"group": 1, "text": "Amazing applications", "type": "Main"},
+        {"group": 1, "text": "Remember: 2,000 free games", "type": "Focus"},
+        {"group": 1, "text": "Data: 30 apps; Over 2,000 free downloads", "type": "Body"},
+        {"group": 2, "text": "Long battery life", "type": "Main"},
+        {"group": 2, "text": "Remember: 100 hours per charge", "type": "Focus"},
+        {"group": 2, "text": "Data: 100 hours between charges; 3-year guarantee", "type": "Body"},
+        {"group": 3, "text": "Easy to play", "type": "Main"},
+        {"group": 3, "text": "Remember: Always in tune!", "type": "Focus"},
+        {"group": 3, "text": "Data: Automatic tuning; Light body", "type": "Body"},
+        {"group": 4, "text": "Flexible sound", "type": "Main"},
+        {"group": 4, "text": "From mellow acoustic to heavy metal thunder!", "type": "Focus"},
+        {"group": 4, "text": "Data: Built-in synthesizer; 6-tone settings", "type": "Body"},
+        {"group": 5, "text": "Getting the car ready", "type": "Main"},
+        {"group": 5, "text": "Don't forget: tires last twice as long", "type": "Focus"},
+        {"group": 5, "text": "Data: Set emergency brake; Block other tires", "type": "Body"},
+        {"group": 6, "text": "Powerful engine", "type": "Main"},
+        {"group": 6, "text": "Don't forget: it has 2000 cc", "type": "Focus"},
+        {"group": 6, "text": "Data: 2000 cc capacity; Engine power details", "type": "Body"},
+        {"group": 7, "text": "About the sights", "type": "Main"},
+        {"group": 7, "text": "Remember: mountains are most beautiful in fall", "type": "Focus"},
+        {"group": 7, "text": "Data: Northernmost city; Describe where it is", "type": "Body"}
     ];
 
-    function generateGame() {
-        const count = parseInt(document.getElementById('studentCount').value);
-        if (count % 3 !== 0) {
-            alert("請輸入3的倍數，以便三三成組！");
-            return;
+    // 先到先得邏輯：使用 Transaction 確保序號不重複
+    const indexRef = db.ref('current_index');
+    indexRef.transaction((currentValue) => {
+        return (currentValue || 0) + 1;
+    }, (error, committed, snapshot) => {
+        if (committed) {
+            const index = snapshot.val() - 1;
+            if (index < cards.length) {
+                displayCard(cards[index]);
+            } else {
+                document.getElementById('loading').innerText = "名額已滿，請觀察其他組別互動！";
+            }
+        } else {
+            document.getElementById('loading').innerText = "連線失敗，請重新掃碼。";
         }
+    });
 
-        const groupCount = count / 3;
-        // 隨機挑選組別並打亂
-        let selectedGroups = [...database].sort(() => 0.5 - Math.random()).slice(0, groupCount);
+    function displayCard(cardData) {
+        document.getElementById('loading').style.display = 'none';
+        const cardDiv = document.getElementById('gameCard');
+        cardDiv.style.display = 'block';
+        cardDiv.classList.add(cardData.type);
 
-        let allCards = [];
-        selectedGroups.forEach((g, index) => {
-            allCards.push({ type: 'Main', text: g.main, id: index });
-            allCards.push({ type: 'Focus', text: g.focus, id: index });
-            allCards.push({ type: 'Body', text: g.body, id: index });
-        });
+        document.getElementById('typeTag').innerText =
+            cardData.type === 'Main' ? "Main Point (重複引言重點)" :
+            cardData.type === 'Focus' ? "Focus Point (強調正文焦點)" : "Body (正文細節數據)";
 
-        // 打亂所有卡片順序
-        allCards.sort(() => 0.5 - Math.random());
-
-        const board = document.getElementById('gameBoard');
-        board.innerHTML = '';
-        allCards.forEach(card => {
-            const div = document.createElement('div');
-            div.className = `card ${card.type}`;
-            div.innerHTML = `<div class="card-type">${card.type === 'Main' ? 'Main Point (引言重複)' : card.type === 'Focus' ? 'Focus Point (強調焦點)' : 'Body (原文細節)'}</div><div>${card.text}</div>`;
-            board.appendChild(div);
-        });
+        document.getElementById('textContent').innerText = cardData.text;
+        document.getElementById('groupId').innerText = cardData.group;
     }
 </script>
 
