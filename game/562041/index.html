@@ -7,6 +7,7 @@
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <script src="config.js"></script>
     <style>
         body { font-family: sans-serif; background-color: #f0f2f5; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
         .card-container { background: white; padding: 30px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); width: 90%; max-width: 400px; text-align: center; }
@@ -43,19 +44,12 @@
 </div>
 
 <script>
-    // Firebase 配置
-    const firebaseConfig = {
-        apiKey: "AIzaSyC6WDL7PtknwJZ3eePVY1z_uqJhUl0YKoM",
-        authDomain: "presentation-game-22d88.firebaseapp.com",
-        databaseURL: "https://presentation-game-22d88-default-rtdb.asia-southeast1.firebasedatabase.app",
-        projectId: "presentation-game-22d88",
-        storageBucket: "presentation-game-22d88.firebasestorage.app",
-        messagingSenderId: "530826202647",
-        appId: "1:530826202647:web:432de9f8195a3764b0d652"
-    };
-
-    // 初始化 Firebase
-    firebase.initializeApp(firebaseConfig);
+    // Firebase 配置從 config.js 載入 (window.FIREBASE_CONFIG)
+    if (!window.FIREBASE_CONFIG) {
+        document.getElementById('loading').innerText = "設定檔載入失敗，請聯絡管理員。";
+        throw new Error("config.js not loaded");
+    }
+    firebase.initializeApp(window.FIREBASE_CONFIG);
     const db = firebase.database();
 
     // 依據來源資料設計的 21 張字卡數據 [1][2][3][4]
