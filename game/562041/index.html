@@ -3,49 +3,56 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>結論互動遊戲：尋找你的夥伴</title>
-    <!-- Firebase SDK -->
+    <title>結論互動遊戲 - 建立遊戲</title>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     <script src="config.js"></script>
     <style>
         body { font-family: sans-serif; background-color: #f0f2f5; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
-        .card-container { background: white; padding: 30px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); width: 90%; max-width: 400px; text-align: center; }
-        .status { color: #666; font-style: italic; }
-        .card { display: none; padding: 20px; border-radius: 15px; margin-top: 20px; border-top: 10px solid; }
-        /* 根據來源資料結構設計的卡片顏色 */
-        .Main { background: #e8f0fe; border-color: #4285f4; } /* 主點：重複引言內容 */
-        .Focus { background: #e6f4ea; border-color: #34a853; } /* 焦點：強調正文數據 */
-        .Body { background: #fef7e0; border-color: #fbbc05; } /* 原文：正文細節 */
-        .type-tag { font-size: 0.8em; font-weight: bold; text-transform: uppercase; color: #555; margin-bottom: 10px; display: block; }
-        .text-content { font-size: 1.4em; font-weight: bold; color: #222; margin-bottom: 20px; }
-        .instruction { text-align: left; font-size: 0.9em; line-height: 1.5; color: #444; background: #fff; padding: 15px; border-radius: 10px; border: 1px solid #ddd; }
-        b { color: #d93025; }
+        .container { background: white; padding: 30px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); width: 90%; max-width: 420px; text-align: center; }
+        h1 { color: #1a73e8; font-size: 1.4em; margin-bottom: 8px; }
+        p.sub { color: #666; font-size: 0.9em; margin-bottom: 24px; }
+        label { font-size: 0.95em; color: #333; }
+        input[type=number] { padding: 10px; font-size: 16px; width: 80px; border: 1px solid #ccc; border-radius: 8px; text-align: center; margin: 0 8px; }
+        button { padding: 12px 28px; font-size: 16px; background: #1a73e8; color: white; border: none; border-radius: 8px; cursor: pointer; margin-top: 20px; }
+        button:hover { background: #1557b0; }
+        #result { display: none; margin-top: 24px; }
+        #qrcode { margin: 16px auto; }
+        .game-url { font-size: 0.8em; color: #888; word-break: break-all; margin-top: 8px; }
+        .game-id { font-size: 2em; font-weight: bold; color: #1a73e8; letter-spacing: 6px; margin: 8px 0; }
     </style>
 </head>
 <body>
 
-<div class="card-container">
-    <div id="loading" class="status">正在連線至 Firebase 並分配角色...</div>
-
-    <div id="gameCard" class="card">
-        <span id="typeTag" class="type-tag"></span>
-        <div id="textContent" class="text-content"></div>
-
+<div class="container">
+    <div id="setup">
+        <h1>Conclusion Matching Game</h1>
+        <p class="sub">建立新遊戲，產生 QR Code 讓學生掃碼抽卡</p>
+        <div>
+            <label>遊戲人數（3 的倍數）：</label><br>
+            <input type="number" id="playerCount" value="21" min="3" max="21" step="3">
+        </div>
+        <button onclick="createGame()">建立遊戲</button>
     </div>
-    <button id="resetBtn" onclick="resetGame()" style="margin-top:20px; padding:8px 16px; font-size:14px; background:#d93025; color:white; border:none; border-radius:8px; cursor:pointer;">重置抽籤</button>
+
+    <div id="result">
+        <h1>遊戲已建立！</h1>
+        <div class="game-id" id="gameIdDisplay"></div>
+        <div id="qrcode"></div>
+        <p class="game-url" id="gameUrl"></p>
+        <button onclick="document.getElementById('setup').style.display='block'; document.getElementById('result').style.display='none';">再建立一場</button>
+    </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 <script>
-    // Firebase 配置從 config.js 載入 (window.FIREBASE_CONFIG)
     if (!window.FIREBASE_CONFIG) {
-        document.getElementById('loading').innerText = "設定檔載入失敗，請聯絡管理員。";
+        document.body.innerText = "設定檔載入失敗";
         throw new Error("config.js not loaded");
     }
     firebase.initializeApp(window.FIREBASE_CONFIG);
     const db = firebase.database();
 
-    // 題庫：7 組，每組 3 張 (Main / Focus / Body)
     const groups = [
         { main: "Amazing applications", focus: "Remember: 2,000 free games", body: "Data: 30 apps; Over 2,000 free downloads" },
         { main: "Long battery life", focus: "Remember: 100 hours per charge", body: "Data: 100 hours between charges; 3-year guarantee" },
@@ -56,36 +63,6 @@
         { main: "About the sights", focus: "Remember: mountains are most beautiful in fall", body: "Data: Northernmost city; Describe where it is" }
     ];
 
-    // 從 Firebase 讀取已打亂的卡片，再用 transaction 分配
-    const indexRef = db.ref('current_index');
-    const cardsRef = db.ref('shuffled_cards');
-
-    cardsRef.once('value').then(snap => {
-        const shuffled = snap.val();
-        if (!shuffled || shuffled.length === 0) {
-            document.getElementById('loading').innerText = "遊戲尚未開始，請等老師重置抽籤。";
-            return;
-        }
-        indexRef.transaction(v => (v || 0) + 1, (error, committed, snapshot) => {
-            if (committed) {
-                const index = snapshot.val() - 1;
-                if (index < shuffled.length) {
-                    displayCard(shuffled[index]);
-                } else {
-                    document.getElementById('loading').innerText = "名額已滿，請觀察其他組別互動！";
-                }
-            } else {
-                document.getElementById('loading').innerText = "連線失敗，請重新掃碼。";
-            }
-        });
-    });
-
-    async function sha256(text) {
-        const data = new TextEncoder().encode(text);
-        const hash = await crypto.subtle.digest('SHA-256', data);
-        return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
-    }
-
     function shuffle(arr) {
         for (let i = arr.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
@@ -94,48 +71,46 @@
         return arr;
     }
 
-    async function resetGame() {
-        const pwd = prompt("請輸入管理密碼：");
-        if (!pwd) return;
-        const hash = await sha256(pwd);
-        const snap = await db.ref('admin_password_hash').once('value');
-        if (hash !== snap.val()) { alert("密碼錯誤！"); return; }
+    function genId() {
+        return String(Math.floor(100000 + Math.random() * 900000));
+    }
 
-        const countStr = prompt("請輸入遊戲人數（須為 3 的倍數，最多 21）：", "21");
-        if (!countStr) return;
-        const count = parseInt(countStr);
+    async function createGame() {
+        const count = parseInt(document.getElementById('playerCount').value);
         if (isNaN(count) || count % 3 !== 0 || count < 3 || count > 21) {
             alert("請輸入 3 的倍數（3~21）！");
             return;
         }
 
-        // 隨機選組、打亂卡片，存入 Firebase
+        const gameId = genId();
         const picked = shuffle([...groups]).slice(0, count / 3);
         let cards = [];
         picked.forEach((g, i) => {
-            cards.push({ type: "Main", text: g.main, group: i + 1 });
-            cards.push({ type: "Focus", text: g.focus, group: i + 1 });
-            cards.push({ type: "Body", text: g.body, group: i + 1 });
+            cards.push({ type: "Main", text: g.main });
+            cards.push({ type: "Focus", text: g.focus });
+            cards.push({ type: "Body", text: g.body });
         });
         shuffle(cards);
 
-        await cardsRef.set(cards);
-        await indexRef.set(0);
-        alert("已重置！共 " + count + " 張卡片（" + (count / 3) + " 組）");
-        location.reload();
-    }
+        await db.ref('games/' + gameId).set({
+            cards: cards,
+            current_index: 0,
+            created: Date.now()
+        });
 
-    function displayCard(cardData) {
-        document.getElementById('loading').style.display = 'none';
-        const cardDiv = document.getElementById('gameCard');
-        cardDiv.style.display = 'block';
-        cardDiv.classList.add(cardData.type);
+        const playUrl = location.href.replace('index.html', '').replace(/\/$/, '') + '/play.html?id=' + gameId;
 
-        document.getElementById('typeTag').innerText =
-            cardData.type === 'Main' ? "Main Point (重複引言重點)" :
-            cardData.type === 'Focus' ? "Focus Point (強調正文焦點)" : "Body (正文細節數據)";
+        document.getElementById('setup').style.display = 'none';
+        document.getElementById('result').style.display = 'block';
+        document.getElementById('gameIdDisplay').innerText = gameId;
+        document.getElementById('gameUrl').innerText = playUrl;
 
-        document.getElementById('textContent').innerText = cardData.text;
+        document.getElementById('qrcode').innerHTML = '';
+        new QRCode(document.getElementById('qrcode'), {
+            text: playUrl,
+            width: 200,
+            height: 200
+        });
     }
 </script>
 

@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>結論互動遊戲：抽卡</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <script src="config.js"></script>
+    <style>
+        body { font-family: sans-serif; background-color: #f0f2f5; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+        .container { background: white; padding: 30px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); width: 90%; max-width: 400px; text-align: center; }
+        .status { color: #666; font-style: italic; }
+        .card { display: none; padding: 20px; border-radius: 15px; margin-top: 20px; border-top: 10px solid; }
+        .Main { background: #e8f0fe; border-color: #4285f4; }
+        .Focus { background: #e6f4ea; border-color: #34a853; }
+        .Body { background: #fef7e0; border-color: #fbbc05; }
+        .type-tag { font-size: 0.8em; font-weight: bold; text-transform: uppercase; color: #555; margin-bottom: 10px; display: block; }
+        .text-content { font-size: 1.4em; font-weight: bold; color: #222; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div id="loading" class="status">正在抽卡...</div>
+    <div id="gameCard" class="card">
+        <span id="typeTag" class="type-tag"></span>
+        <div id="textContent" class="text-content"></div>
+    </div>
+</div>
+
+<script>
+    if (!window.FIREBASE_CONFIG) {
+        document.getElementById('loading').innerText = "設定檔載入失敗，請聯絡管理員。";
+        throw new Error("config.js not loaded");
+    }
+    firebase.initializeApp(window.FIREBASE_CONFIG);
+    const db = firebase.database();
+
+    const gameId = new URLSearchParams(location.search).get('id');
+    if (!gameId) {
+        document.getElementById('loading').innerText = "無效的遊戲連結。";
+        throw new Error("no game id");
+    }
+
+    const gameRef = db.ref('games/' + gameId);
+
+    gameRef.once('value').then(snap => {
+        const game = snap.val();
+        if (!game || !game.cards) {
+            document.getElementById('loading').innerText = "找不到此遊戲，可能已過期。";
+            return;
+        }
+
+        const indexRef = gameRef.child('current_index');
+        indexRef.transaction(v => (v || 0) + 1, (error, committed, snapshot) => {
+            if (committed) {
+                const index = snapshot.val() - 1;
+                if (index < game.cards.length) {
+                    displayCard(game.cards[index]);
+                } else {
+                    document.getElementById('loading').innerText = "名額已滿！";
+                }
+            } else {
+                document.getElementById('loading').innerText = "連線失敗，請重新掃碼。";
+            }
+        });
+    });
+
+    function displayCard(cardData) {
+        document.getElementById('loading').style.display = 'none';
+        const cardDiv = document.getElementById('gameCard');
+        cardDiv.style.display = 'block';
+        cardDiv.classList.add(cardData.type);
+
+        document.getElementById('typeTag').innerText =
+            cardData.type === 'Main' ? "Main Point (重複引言重點)" :
+            cardData.type === 'Focus' ? "Focus Point (強調正文焦點)" : "Body (正文細節數據)";
+
+        document.getElementById('textContent').innerText = cardData.text;
+    }
+</script>
+
+</body>
+</html>
