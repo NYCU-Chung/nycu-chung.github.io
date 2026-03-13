@@ -28,6 +28,13 @@
         .result-msg { margin-top: 12px; font-size: 1.1em; font-weight: bold; padding: 10px; border-radius: 8px; }
         .correct { background: #e6f4ea; color: #1e7e34; }
         .wrong { background: #fce8e6; color: #d93025; }
+        .group-overview { margin-top: 16px; text-align: left; }
+        .group-overview .group-item { padding: 10px; border-radius: 8px; margin-bottom: 8px; border-left: 5px solid; }
+        .group-overview .group-item.Main { background: #e8f0fe; border-color: #4285f4; }
+        .group-overview .group-item.Focus { background: #e6f4ea; border-color: #34a853; }
+        .group-overview .group-item.Body { background: #fef7e0; border-color: #fbbc05; }
+        .group-overview .group-item .gi-tag { font-size: 0.75em; font-weight: bold; text-transform: uppercase; color: #555; }
+        .group-overview .group-item .gi-text { font-weight: bold; color: #222; margin-top: 2px; }
     </style>
 </head>
 <body>
@@ -124,6 +131,25 @@
         document.getElementById('textContent').innerText = cardData.text;
     }
 
+    function showGroupOverview() {
+        const typeOrder = { 'Main': 1, 'Focus': 2, 'Body': 3 };
+        const typeLabel = { 'Main': 'Main Point (主點)', 'Focus': 'Focus Point (焦點)', 'Body': 'Body (原文)' };
+        const groupCards = allCards
+            .filter(c => c.group === myCard.group)
+            .sort((a, b) => typeOrder[a.type] - typeOrder[b.type]);
+
+        let html = '<div class="group-overview">';
+        groupCards.forEach(c => {
+            html += '<div class="group-item ' + c.type + '">'
+                + '<div class="gi-tag">#' + c.cardId + ' ' + typeLabel[c.type] + '</div>'
+                + '<div class="gi-text">' + c.text + '</div>'
+                + '</div>';
+        });
+        html += '</div>';
+
+        document.getElementById('answerSection').insertAdjacentHTML('beforeend', html);
+    }
+
     function checkAnswer() {
         const a1 = parseInt(document.getElementById('ans1').value);
         const a2 = parseInt(document.getElementById('ans2').value);
@@ -144,6 +170,8 @@
         if (answers[0] === expected[0] && answers[1] === expected[1]) {
             msgDiv.className = 'result-msg correct';
             msgDiv.innerText = '正確！你找到夥伴了！';
+            document.getElementById('submitBtn').disabled = true;
+            showGroupOverview();
         } else {
             msgDiv.className = 'result-msg wrong';
             msgDiv.innerText = '答錯了，再試試看！';
