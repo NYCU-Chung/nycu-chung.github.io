@@ -33,6 +33,7 @@
         <div id="textContent" class="text-content"></div>
 
     </div>
+    <button id="resetBtn" onclick="resetGame()" style="margin-top:20px; padding:8px 16px; font-size:14px; background:#d93025; color:white; border:none; border-radius:8px; cursor:pointer;">重置抽籤</button>
 </div>
 
 <script>
@@ -86,6 +87,25 @@
         }
     });
 
+    async function sha256(text) {
+        const data = new TextEncoder().encode(text);
+        const hash = await crypto.subtle.digest('SHA-256', data);
+        return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    async function resetGame() {
+        const pwd = prompt("請輸入管理密碼：");
+        if (!pwd) return;
+        const hash = await sha256(pwd);
+        const snap = await db.ref('admin_password_hash').once('value');
+        if (hash === snap.val()) {
+            await indexRef.set(0);
+            location.reload();
+        } else {
+            alert("密碼錯誤！");
+        }
+    }
+
     function displayCard(cardData) {
         document.getElementById('loading').style.display = 'none';
         const cardDiv = document.getElementById('gameCard');
@@ -97,7 +117,6 @@
             cardData.type === 'Focus' ? "Focus Point (強調正文焦點)" : "Body (正文細節數據)";
 
         document.getElementById('textContent').innerText = cardData.text;
-        document.getElementById('groupId').innerText = cardData.group;
     }
 </script>
 
