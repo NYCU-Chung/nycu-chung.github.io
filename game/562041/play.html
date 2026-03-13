@@ -43,29 +43,38 @@
         throw new Error("no game id");
     }
 
-    const gameRef = db.ref('games/' + gameId);
+    const storageKey = 'game_card_' + gameId;
+    const cached = localStorage.getItem(storageKey);
 
-    gameRef.once('value').then(snap => {
-        const game = snap.val();
-        if (!game || !game.cards) {
-            document.getElementById('loading').innerText = "找不到此遊戲，可能已過期。";
-            return;
-        }
-
-        const indexRef = gameRef.child('current_index');
-        indexRef.transaction(v => (v || 0) + 1, (error, committed, snapshot) => {
-            if (committed) {
-                const index = snapshot.val() - 1;
-                if (index < game.cards.length) {
-                    displayCard(game.cards[index]);
-                } else {
-                    document.getElementById('loading').innerText = "名額已滿！";
-                }
-            } else {
-                document.getElementById('loading').innerText = "連線失敗，請重新掃碼。";
+    if (cached) {
+        // 已抽過，直接顯示同一張卡
+        displayCard(JSON.parse(cached));
+    } else {
+        const gameRef = db.ref('games/' + gameId);
+        gameRef.once('value').then(snap => {
+            const game = snap.val();
+            if (!game || !game.cards) {
+                document.getElementById('loading').innerText = "找不到此遊戲，可能已過期。";
+                return;
             }
+
+            const indexRef = gameRef.child('current_index');
+            indexRef.transaction(v => (v || 0) + 1, (error, committed, snapshot) => {
+                if (committed) {
+                    const index = snapshot.val() - 1;
+                    if (index < game.cards.length) {
+                        const card = game.cards[index];
+                        localStorage.setItem(storageKey, JSON.stringify(card));
+                        displayCard(card);
+                    } else {
+                        document.getElementById('loading').innerText = "名額已滿！";
+                    }
+                } else {
+                    document.getElementById('loading').innerText = "連線失敗，請重新掃碼。";
+                }
+            });
         });
-    });
+    }
 
     function displayCard(cardData) {
         document.getElementById('loading').style.display = 'none';
