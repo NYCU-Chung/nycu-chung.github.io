@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>結論互動遊戲 - 建立遊戲</title>
+    <title>Conclusion Matching Game - Create</title>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     <script src="config.js"></script>
@@ -27,27 +27,27 @@
 <div class="container">
     <div id="setup">
         <h1>Conclusion Matching Game</h1>
-        <p class="sub">建立新遊戲，產生 QR Code 讓學生掃碼抽卡</p>
+        <p class="sub">Create a new game and generate a QR Code for students to scan</p>
         <div>
-            <label>遊戲人數（3 的倍數）：</label><br>
+            <label>Number of players (multiple of 3):</label><br>
             <input type="number" id="playerCount" value="21" min="3" max="21" step="3">
         </div>
-        <button onclick="createGame()">建立遊戲</button>
+        <button onclick="createGame()">Create Game</button>
     </div>
 
     <div id="result">
-        <h1>遊戲已建立！</h1>
+        <h1>Game Created!</h1>
         <div class="game-id" id="gameIdDisplay"></div>
         <div id="qrcode"></div>
         <p class="game-url" id="gameUrl"></p>
-        <button onclick="document.getElementById('setup').style.display='block'; document.getElementById('result').style.display='none';">再建立一場</button>
+        <button onclick="document.getElementById('setup').style.display='block'; document.getElementById('result').style.display='none';">Create Another</button>
     </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 <script>
     if (!window.FIREBASE_CONFIG) {
-        document.body.innerText = "設定檔載入失敗";
+        document.body.innerText = "Config file failed to load.";
         throw new Error("config.js not loaded");
     }
     firebase.initializeApp(window.FIREBASE_CONFIG);
@@ -78,7 +78,7 @@
     async function createGame() {
         const count = parseInt(document.getElementById('playerCount').value);
         if (isNaN(count) || count % 3 !== 0 || count < 3 || count > 21) {
-            alert("請輸入 3 的倍數（3~21）！");
+            alert("Please enter a multiple of 3 (3-21).");
             return;
         }
 

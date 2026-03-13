@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>結論互動遊戲：抽卡</title>
+    <title>Conclusion Matching Game</title>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     <script src="config.js"></script>
@@ -40,26 +40,26 @@
 <body>
 
 <div class="container">
-    <div id="loading" class="status">正在抽卡...</div>
+    <div id="loading" class="status">Drawing your card...</div>
     <div id="gameCard" class="card">
         <span id="typeTag" class="type-tag"></span>
         <div id="cardIdDisplay" class="card-id"></div>
         <div id="textContent" class="text-content"></div>
     </div>
     <div id="answerSection" class="answer-section">
-        <label>輸入你的兩位夥伴的卡片編號：</label>
+        <label>Enter your two partners' card numbers:</label>
         <div class="answer-inputs">
             <input type="number" id="ans1" placeholder="#" min="10" max="99">
             <input type="number" id="ans2" placeholder="#" min="10" max="99">
         </div>
-        <button class="submit-btn" id="submitBtn" onclick="checkAnswer()">提交答案</button>
+        <button class="submit-btn" id="submitBtn" onclick="checkAnswer()">Submit</button>
         <div id="resultMsg"></div>
     </div>
 </div>
 
 <script>
     if (!window.FIREBASE_CONFIG) {
-        document.getElementById('loading').innerText = "設定檔載入失敗，請聯絡管理員。";
+        document.getElementById('loading').innerText = "Config file failed to load.";
         throw new Error("config.js not loaded");
     }
     firebase.initializeApp(window.FIREBASE_CONFIG);
@@ -67,7 +67,7 @@
 
     const gameId = new URLSearchParams(location.search).get('id');
     if (!gameId) {
-        document.getElementById('loading').innerText = "無效的遊戲連結。";
+        document.getElementById('loading').innerText = "Invalid game link.";
         throw new Error("no game id");
     }
 
@@ -85,7 +85,7 @@
         gameRef.once('value').then(snap => {
             const game = snap.val();
             if (!game || !game.cards) {
-                document.getElementById('loading').innerText = "找不到此遊戲，可能已過期。";
+                document.getElementById('loading').innerText = "Game not found. It may have expired.";
                 return;
             }
             allCards = game.cards;
@@ -100,10 +100,10 @@
                         displayCard(myCard);
                         document.getElementById('answerSection').style.display = 'block';
                     } else {
-                        document.getElementById('loading').innerText = "名額已滿！";
+                        document.getElementById('loading').innerText = "All cards have been taken!";
                     }
                 } else {
-                    document.getElementById('loading').innerText = "連線失敗，請重新掃碼。";
+                    document.getElementById('loading').innerText = "Connection failed. Please try again.";
                 }
             });
         });
@@ -124,8 +124,8 @@
         cardDiv.classList.add(cardData.type);
 
         document.getElementById('typeTag').innerText =
-            cardData.type === 'Main' ? "Main Point (重複引言重點)" :
-            cardData.type === 'Focus' ? "Focus Point (強調正文焦點)" : "Body (正文細節數據)";
+            cardData.type === 'Main' ? "Main Point" :
+            cardData.type === 'Focus' ? "Focus Point" : "Body";
 
         document.getElementById('cardIdDisplay').innerText = '#' + cardData.cardId;
         document.getElementById('textContent').innerText = cardData.text;
@@ -133,7 +133,7 @@
 
     function showGroupOverview() {
         const typeOrder = { 'Main': 1, 'Focus': 2, 'Body': 3 };
-        const typeLabel = { 'Main': 'Main Point (主點)', 'Focus': 'Focus Point (焦點)', 'Body': 'Body (原文)' };
+        const typeLabel = { 'Main': 'Main Point', 'Focus': 'Focus Point', 'Body': 'Body' };
         const groupCards = allCards
             .filter(c => c.group === myCard.group)
             .sort((a, b) => typeOrder[a.type] - typeOrder[b.type]);
@@ -154,7 +154,7 @@
         const a1 = parseInt(document.getElementById('ans1').value);
         const a2 = parseInt(document.getElementById('ans2').value);
         if (isNaN(a1) || isNaN(a2)) {
-            alert("請輸入兩個夥伴的卡片編號！");
+            alert("Please enter both partner card numbers!");
             return;
         }
 
@@ -169,12 +169,12 @@
         const msgDiv = document.getElementById('resultMsg');
         if (answers[0] === expected[0] && answers[1] === expected[1]) {
             msgDiv.className = 'result-msg correct';
-            msgDiv.innerText = '正確！你找到夥伴了！';
+            msgDiv.innerText = 'Correct! You found your partners!';
             document.getElementById('submitBtn').disabled = true;
             showGroupOverview();
         } else {
             msgDiv.className = 'result-msg wrong';
-            msgDiv.innerText = '答錯了，再試試看！';
+            msgDiv.innerText = 'Wrong! Try again!';
         }
     }
 </script>
