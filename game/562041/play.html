@@ -109,11 +109,16 @@
         });
     }
 
+    const solvedKey = 'game_solved_' + gameId;
+
     function loadCardsAndShow() {
         db.ref('games/' + gameId + '/cards').once('value').then(snap => {
             allCards = snap.val();
             displayCard(myCard);
             document.getElementById('answerSection').style.display = 'block';
+            if (localStorage.getItem(solvedKey) === 'true') {
+                restoreSolvedState();
+            }
         });
     }
 
@@ -129,6 +134,14 @@
 
         document.getElementById('cardIdDisplay').innerText = '#' + cardData.cardId;
         document.getElementById('textContent').innerText = cardData.text;
+    }
+
+    function restoreSolvedState() {
+        const msgDiv = document.getElementById('resultMsg');
+        msgDiv.className = 'result-msg correct';
+        msgDiv.innerText = 'Correct! You found your partners!';
+        document.getElementById('submitBtn').disabled = true;
+        showGroupOverview();
     }
 
     function showGroupOverview() {
@@ -171,6 +184,7 @@
             msgDiv.className = 'result-msg correct';
             msgDiv.innerText = 'Correct! You found your partners!';
             document.getElementById('submitBtn').disabled = true;
+            localStorage.setItem(solvedKey, 'true');
             showGroupOverview();
         } else {
             msgDiv.className = 'result-msg wrong';
