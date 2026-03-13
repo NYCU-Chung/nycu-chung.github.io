@@ -15,8 +15,19 @@
         .Main { background: #e8f0fe; border-color: #4285f4; }
         .Focus { background: #e6f4ea; border-color: #34a853; }
         .Body { background: #fef7e0; border-color: #fbbc05; }
-        .type-tag { font-size: 0.8em; font-weight: bold; text-transform: uppercase; color: #555; margin-bottom: 10px; display: block; }
-        .text-content { font-size: 1.4em; font-weight: bold; color: #222; }
+        .type-tag { font-size: 0.8em; font-weight: bold; text-transform: uppercase; color: #555; margin-bottom: 6px; display: block; }
+        .card-id { font-size: 2.2em; font-weight: bold; color: #1a73e8; margin-bottom: 8px; }
+        .text-content { font-size: 1.3em; font-weight: bold; color: #222; }
+        .answer-section { display: none; margin-top: 20px; padding: 16px; background: #f8f9fa; border-radius: 12px; border: 1px solid #e0e0e0; }
+        .answer-section label { font-size: 0.9em; color: #333; display: block; margin-bottom: 12px; }
+        .answer-inputs { display: flex; gap: 10px; justify-content: center; margin-bottom: 14px; }
+        .answer-inputs input { padding: 10px; font-size: 18px; width: 70px; border: 1px solid #ccc; border-radius: 8px; text-align: center; }
+        .submit-btn { padding: 10px 24px; font-size: 15px; background: #1a73e8; color: white; border: none; border-radius: 8px; cursor: pointer; }
+        .submit-btn:hover { background: #1557b0; }
+        .submit-btn:disabled { background: #aaa; cursor: default; }
+        .result-msg { margin-top: 12px; font-size: 1.1em; font-weight: bold; padding: 10px; border-radius: 8px; }
+        .correct { background: #e6f4ea; color: #1e7e34; }
+        .wrong { background: #fce8e6; color: #d93025; }
     </style>
 </head>
 <body>
@@ -25,7 +36,17 @@
     <div id="loading" class="status">正在抽卡...</div>
     <div id="gameCard" class="card">
         <span id="typeTag" class="type-tag"></span>
+        <div id="cardIdDisplay" class="card-id"></div>
         <div id="textContent" class="text-content"></div>
+    </div>
+    <div id="answerSection" class="answer-section">
+        <label>輸入你的兩位夥伴的卡片編號：</label>
+        <div class="answer-inputs">
+            <input type="number" id="ans1" placeholder="#" min="10" max="99">
+            <input type="number" id="ans2" placeholder="#" min="10" max="99">
+        </div>
+        <button class="submit-btn" id="submitBtn" onclick="checkAnswer()">提交答案</button>
+        <div id="resultMsg"></div>
     </div>
 </div>
 
@@ -43,12 +64,15 @@
         throw new Error("no game id");
     }
 
+    let allCards = null;
+    let myCard = null;
+
     const storageKey = 'game_card_' + gameId;
     const cached = localStorage.getItem(storageKey);
 
     if (cached) {
-        // 已抽過，直接顯示同一張卡
-        displayCard(JSON.parse(cached));
+        myCard = JSON.parse(cached);
+        loadCardsAndShow();
     } else {
         const gameRef = db.ref('games/' + gameId);
         gameRef.once('value').then(snap => {
@@ -57,15 +81,17 @@
                 document.getElementById('loading').innerText = "找不到此遊戲，可能已過期。";
                 return;
             }
+            allCards = game.cards;
 
             const indexRef = gameRef.child('current_index');
             indexRef.transaction(v => (v || 0) + 1, (error, committed, snapshot) => {
                 if (committed) {
                     const index = snapshot.val() - 1;
-                    if (index < game.cards.length) {
-                        const card = game.cards[index];
-                        localStorage.setItem(storageKey, JSON.stringify(card));
-                        displayCard(card);
+                    if (index < allCards.length) {
+                        myCard = allCards[index];
+                        localStorage.setItem(storageKey, JSON.stringify(myCard));
+                        displayCard(myCard);
+                        document.getElementById('answerSection').style.display = 'block';
                     } else {
                         document.getElementById('loading').innerText = "名額已滿！";
                     }
@@ -73,6 +99,14 @@
                     document.getElementById('loading').innerText = "連線失敗，請重新掃碼。";
                 }
             });
+        });
+    }
+
+    function loadCardsAndShow() {
+        db.ref('games/' + gameId + '/cards').once('value').then(snap => {
+            allCards = snap.val();
+            displayCard(myCard);
+            document.getElementById('answerSection').style.display = 'block';
         });
     }
 
@@ -86,7 +120,34 @@
             cardData.type === 'Main' ? "Main Point (重複引言重點)" :
             cardData.type === 'Focus' ? "Focus Point (強調正文焦點)" : "Body (正文細節數據)";
 
+        document.getElementById('cardIdDisplay').innerText = '#' + cardData.cardId;
         document.getElementById('textContent').innerText = cardData.text;
+    }
+
+    function checkAnswer() {
+        const a1 = parseInt(document.getElementById('ans1').value);
+        const a2 = parseInt(document.getElementById('ans2').value);
+        if (isNaN(a1) || isNaN(a2)) {
+            alert("請輸入兩個夥伴的卡片編號！");
+            return;
+        }
+
+        // 找出同組的其他兩張卡的 cardId
+        const partners = allCards
+            .filter(c => c.group === myCard.group && c.cardId !== myCard.cardId)
+            .map(c => c.cardId);
+
+        const answers = [a1, a2].sort((a, b) => a - b);
+        const expected = partners.sort((a, b) => a - b);
+
+        const msgDiv = document.getElementById('resultMsg');
+        if (answers[0] === expected[0] && answers[1] === expected[1]) {
+            msgDiv.className = 'result-msg correct';
+            msgDiv.innerText = '正確！你找到夥伴了！';
+        } else {
+            msgDiv.className = 'result-msg wrong';
+            msgDiv.innerText = '答錯了，再試試看！';
+        }
     }
 </script>
 

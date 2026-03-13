@@ -84,11 +84,18 @@
 
         const gameId = genId();
         const picked = shuffle([...groups]).slice(0, count / 3);
+
+        // 產生不重複的兩位數 ID
+        let idPool = [];
+        for (let n = 10; n <= 99; n++) idPool.push(n);
+        shuffle(idPool);
+
         let cards = [];
         picked.forEach((g, i) => {
-            cards.push({ type: "Main", text: g.main });
-            cards.push({ type: "Focus", text: g.focus });
-            cards.push({ type: "Body", text: g.body });
+            const group = i + 1;
+            cards.push({ type: "Main", text: g.main, group: group, cardId: idPool.pop() });
+            cards.push({ type: "Focus", text: g.focus, group: group, cardId: idPool.pop() });
+            cards.push({ type: "Body", text: g.body, group: group, cardId: idPool.pop() });
         });
         shuffle(cards);
 
