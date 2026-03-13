@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NYCU-Chung</title>
+    <title>game - NYCU-Chung</title>
     <style>
         :root {
             --bg: #0d1117;
@@ -94,9 +94,6 @@
         .file-icon.folder {
             color: #54aeff;
         }
-        .file-icon.file {
-            color: var(--icon-file);
-        }
         .file-name {
             flex: 1;
             color: var(--link);
@@ -109,11 +106,6 @@
             color: var(--text-muted);
             font-size: 0.85rem;
             text-align: right;
-        }
-        .empty-state {
-            text-align: center;
-            padding: 3rem 1rem;
-            color: var(--text-muted);
         }
         .footer {
             margin-top: 2rem;
@@ -145,19 +137,16 @@
         </div>
 
         <div class="breadcrumb">
-            <span class="current">root</span>
+            <a href="../">root</a>
+            <span class="separator">/</span>
+            <span class="current">game</span>
         </div>
 
         <div class="file-list">
-            <a href="./game/" class="file-item">
+            <a href="./562041/" class="file-item">
                 <span class="file-icon folder">📁</span>
-                <span class="file-name">game</span>
-                <span class="file-desc">互動遊戲</span>
-            </a>
-            <a href="./tools/" class="file-item">
-                <span class="file-icon folder">📁</span>
-                <span class="file-name">tools</span>
-                <span class="file-desc">實用工具集</span>
+                <span class="file-name">562041</span>
+                <span class="file-desc">簡報結論互動遊戲</span>
             </a>
         </div>
 
