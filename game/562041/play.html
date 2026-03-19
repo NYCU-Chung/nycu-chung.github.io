@@ -114,6 +114,11 @@
     function loadCardsAndShow() {
         db.ref('games/' + gameId + '/cards').once('value').then(snap => {
             allCards = snap.val();
+            if (!allCards) {
+                document.getElementById('loading').innerText = "Game data unavailable. Please ask your teacher for a new link.";
+                document.getElementById('answerSection').style.display = 'none';
+                return;
+            }
             displayCard(myCard);
             document.getElementById('answerSection').style.display = 'block';
             if (localStorage.getItem(solvedKey) === 'true') {
