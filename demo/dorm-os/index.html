@@ -1,0 +1,1723 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Dorm OS · Interactive Demo</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", "Noto Sans TC", sans-serif;
+    background: #F4F1EC;
+    color: #0F172A;
+    line-height: 1.45;
+    background-image:
+      radial-gradient(ellipse at top left, rgba(22, 163, 74, 0.06), transparent 60%),
+      radial-gradient(ellipse at bottom right, rgba(245, 158, 11, 0.05), transparent 55%);
+    background-attachment: fixed;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  #app {
+    width: 100%; height: 100%;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .phone-stage {
+    user-select: none;
+    transform-origin: center center;
+    will-change: transform;
+  }
+
+  /* Toast */
+  .toast {
+    position: fixed; left: 50%; bottom: 32px; transform: translateX(-50%);
+    background: #15803D; color: white; padding: 12px 20px;
+    border-radius: 999px; font-size: 13px; font-weight: 500;
+    box-shadow: 0 10px 30px rgba(21,128,61,0.25); z-index: 9999;
+    animation: pop 0.25s ease; pointer-events: none;
+  }
+  @keyframes pop { from { transform: translate(-50%, 8px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
+
+  /* utility for buttons inside the phone */
+  button { font: inherit; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.development.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7.25.6/babel.min.js"></script>
+<script type="text/babel" data-presets="env,react">
+const { useState, useEffect, useRef, useMemo, useCallback } = React;
+
+/* =========================================================================
+ *  Dorm OS · single-file demo
+ *  Assumptions (Junior pass, kept honest in source):
+ *   - Pure front-end demo, no backend, all data is static + in-memory.
+ *   - Reload resets state intentionally — pitch demos benefit from fresh state.
+ *   - High information density on every screen (this is a "context-aware" product).
+ *   - Phone shell follows huashu-design ios_frame.jsx (393×852, DI 124×36).
+ *   - Home button is intentionally outside the bottom tab bar (top-left of each screen).
+ * =======================================================================*/
+
+/* =========================================================================
+ *  ICONS — minimal inline SVG, single-color stroke, native-app friendly.
+ *  Avoiding emoji icons (AI slop signal). Lucide-ish style.
+ * =======================================================================*/
+const Icon = ({ d, size = 22, stroke = 1.7, fill = "none", color = "currentColor", style }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color}
+       strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round" style={style}>
+    {Array.isArray(d) ? d.map((p, i) => <path key={i} d={p} />) : <path d={d} />}
+  </svg>
+);
+const ICONS = {
+  home:    "M3 11l9-8 9 8M5 9.5V21h14V9.5",
+  dorm:    "M3 21V8l9-5 9 5v13M9 21v-7h6v7",
+  events:  "M4 5h16v15H4zM4 9h16M9 3v4M15 3v4",
+  reports: "M12 9v4M12 17h.01M10.3 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z",
+  groups:  "M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM22 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75",
+  move:    "M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16zM3.27 6.96L12 12.01l8.73-5.05M12 22.08V12",
+  arrowL:  "M19 12H5M12 19l-7-7 7-7",
+  arrowR:  "M5 12h14M12 5l7 7-7 7",
+  plus:    "M12 5v14M5 12h14",
+  check:   "M20 6L9 17l-5-5",
+  bell:    "M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0",
+  camera:  "M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2zM12 17a4 4 0 100-8 4 4 0 000 8z",
+  drop:    "M12 2.5l5 7a6 6 0 11-10 0z",
+  wash:    "M5 3h14v18H5zM7 3v18M9 7h.01M9 11a3 3 0 100 6 3 3 0 000-6z",
+  fire:    "M14 4s-1 2-1 4 1 3 1 3a4 4 0 11-7 2c0-3 4-4 3-9 0 0 4 0 4 0z",
+  user:    "M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z",
+  moon:    "M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z",
+  cup:     "M18 8h1a4 4 0 010 8h-1M2 8h16v9a4 4 0 01-4 4H6a4 4 0 01-4-4zM6 1v3M10 1v3M14 1v3",
+  game:    "M6 11h4M8 9v4M15 12h.01M18 10h.01M17.32 5H6.68a4 4 0 00-3.978 3.59L2.063 14.5a3 3 0 005.18 2.247l1.347-1.554a2 2 0 011.51-.693h3.8a2 2 0 011.51.693l1.347 1.554a3 3 0 005.18-2.247l-.638-5.91A4 4 0 0017.32 5z",
+  chat:    "M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8z",
+  trash:   "M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2",
+  light:   "M9 18h6M10 22h4M15.09 14a5 5 0 10-6.18 0 4 4 0 011.59 3.18V18h3v-.82a4 4 0 011.59-3.18z",
+  vendor:  "M5 3h14v18H5zM5 14h14M9 7h.01M9 18h.01",
+  wallet:  "M21 12V7H5a2 2 0 010-4h14v4M3 5v14a2 2 0 002 2h16v-5M18 12a2 2 0 100 4h3v-4z",
+  broom:   "M3 21l3-3M14 3l7 7M9 8l7 7-3 3-7-7 3-3zM2 22l4-1",
+  send:    "M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z",
+  mic:     "M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3zM19 10v2a7 7 0 01-14 0v-2M12 19v4M8 23h8",
+  zzz:     "M3 6h8L3 18h8M14 4h6l-6 8h6M14 14h4l-4 6h4",
+  focus:   "M21 21l-4.35-4.35M11 18a7 7 0 100-14 7 7 0 000 14z",
+  away:    "M12 22a10 10 0 100-20 10 10 0 000 20zM12 6v6l4 2",
+  clock:   "M12 22a10 10 0 100-20 10 10 0 000 20zM12 6v6l4 2",
+  key:     "M21 2l-2 2M15 7l4 4M3 21l9-9M11.5 11.5L3 20l1 1 8.5-8.5M16.5 16.5a4 4 0 105.66-5.66 4 4 0 00-5.66 5.66z",
+  fridge:  "M5 3h14v18H5zM5 11h14M8 7v1M8 14v3",
+  bed:     "M2 4v16M22 8v12M2 14h20M2 11h10v3M5 14V8a3 3 0 016 0v6",
+};
+
+/* =========================================================================
+ *  IPHONE FRAME — adapted from huashu-design ios_frame.jsx (393×852).
+ *  Standard: Dynamic Island 124×36 top:12, status bar height 54, home indicator bottom 34.
+ * =======================================================================*/
+function IosFrame({ children, time = "9:41", battery = 87, darkMode = false }) {
+  const textColor = darkMode ? "#fff" : "#000";
+  const W = 393, H = 852;
+  return (
+    <div style={{
+      display: "inline-block", padding: 12, background: "#1a1a1a",
+      borderRadius: 60, position: "relative",
+      boxShadow: "0 0 0 2px #2a2a2a, 0 30px 80px rgba(0,0,0,0.25), 0 12px 28px rgba(0,0,0,0.18)",
+    }}>
+      <div style={{
+        position: "relative", borderRadius: 48, overflow: "hidden",
+        background: darkMode ? "#000" : "#fff", width: W, height: H,
+      }}>
+        {/* status bar */}
+        <div style={{
+          position: "absolute", top: 0, left: 0, right: 0, height: 54,
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "0 32px", fontSize: 16, fontWeight: 600,
+          fontFamily: '-apple-system, "SF Pro Text", sans-serif',
+          color: textColor, zIndex: 20, pointerEvents: "none",
+        }}>
+          <span>{time}</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <div style={{ display: "flex", alignItems: "flex-end", gap: 2, height: 12 }}>
+              {[4, 6, 9, 11].map((h, i) => (
+                <div key={i} style={{ width: 3, height: h, background: "currentColor", borderRadius: 1 }} />
+              ))}
+            </div>
+            <svg width="16" height="12" viewBox="0 0 16 12" fill="none">
+              <path d="M8 11.5a1 1 0 100-2 1 1 0 000 2z" fill="currentColor" />
+              <path d="M3 7.5a7 7 0 0110 0" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" />
+              <path d="M1 4.5a11 11 0 0114 0" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" opacity="0.7" />
+            </svg>
+            <div style={{ width: 26, height: 12, border: "1.5px solid currentColor",
+                          borderRadius: 3, padding: 1, position: "relative", opacity: 0.85 }}>
+              <div style={{ width: `${battery}%`, height: "100%", background: "currentColor", borderRadius: 1 }} />
+              <div style={{ position: "absolute", top: 3, right: -3, width: 2, height: 6,
+                            background: "currentColor", borderRadius: "0 1px 1px 0" }} />
+            </div>
+          </div>
+        </div>
+        {/* dynamic island */}
+        <div style={{
+          position: "absolute", top: 12, left: "50%", transform: "translateX(-50%)",
+          width: 124, height: 36, background: "#000", borderRadius: 999, zIndex: 30,
+        }} />
+        {/* content area */}
+        <div style={{ position: "absolute", top: 54, left: 0, right: 0, bottom: 0, overflow: "hidden" }}>
+          {children}
+        </div>
+        {/* home indicator */}
+        <div style={{
+          position: "absolute", bottom: 8, left: "50%", transform: "translateX(-50%)",
+          width: 140, height: 5, borderRadius: 999, zIndex: 50,
+          background: darkMode ? "rgba(255,255,255,0.55)" : "rgba(0,0,0,0.35)",
+        }} />
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================================
+ *  MOCK DATA
+ * =======================================================================*/
+const MOCK = {
+  user: { name: "Alex", room: "303", floor: "3F" },
+  laundry: [
+    { id: "w1", type: "washer", label: "Washer 1", status: "in_use", left: 12 },
+    { id: "w2", type: "washer", label: "Washer 2", status: "available" },
+    { id: "w3", type: "washer", label: "Washer 3", status: "available" },
+    { id: "d1", type: "dryer",  label: "Dryer 1",  status: "in_use", left: 28 },
+    { id: "d2", type: "dryer",  label: "Dryer 2",  status: "broken" },
+  ],
+  facility: [
+    { id: "sa", icon: "drop", label: "Shower Room A", status: "available" },
+    { id: "sb", icon: "drop", label: "Shower Room B", status: "occupied" },
+    { id: "t1", icon: "fire", label: "Toilet · 1F",   status: "low" },
+    { id: "t2", icon: "fire", label: "Toilet · 2F",   status: "crowded" },
+  ],
+  events: [
+    { id: "e1", title: "Movie Night", subtitle: "Spirited Away · Lounge",
+      day: "Fri", time: "20:00 – 22:00", joined: 18, cap: 30, host: "Dorm Council", icon: "events" },
+    { id: "e2", title: "Board Game Night", subtitle: "Catan · Codenames · Avalon",
+      day: "Sat", time: "19:30 – 23:00", joined: 12, cap: 24, host: "3F Club", icon: "game" },
+    { id: "e3", title: "Study Room Booking", subtitle: "Quiet zone · Finals week",
+      day: "Sun", time: "14:00 – 17:00", joined: 4, cap: 8,  host: "Self-organized", icon: "focus" },
+    { id: "e4", title: "Open Mic & Coffee", subtitle: "Lounge · Bring your own song",
+      day: "Tue", time: "19:00 – 21:00", joined: 7, cap: 20, host: "RA Mei",  icon: "mic" },
+  ],
+  reports: [
+    { id: "r1", title: "2F Trash Bin", note: "Full, overflowing onto floor",
+      icon: "trash", state: "Pending", time: "10 min ago", reporter: "You" },
+    { id: "r2", title: "Laundry Dryer 2", note: "Spinning but not heating",
+      icon: "wash",  state: "In progress", time: "2 hours ago", reporter: "Brian (304)" },
+    { id: "r3", title: "1F Hallway Light", note: "Flickering, bulb dead",
+      icon: "light", state: "Fixed", time: "Yesterday", reporter: "Jordan (212)" },
+    { id: "r4", title: "3F Vending Machine", note: "Out of stock — barley tea",
+      icon: "vendor", state: "Pending", time: "Today", reporter: "Chris (303)" },
+  ],
+  moveIn: [
+    "Confirm room number with RA",
+    "Check bed and desk condition",
+    "Take photos of existing damage",
+    "Prepare extension cord",
+    "Buy cleaning supplies",
+    "Join your room group",
+  ],
+  moveOut: [
+    "Clean personal area",
+    "Empty trash",
+    "Defrost mini fridge",
+    "Return key to RA",
+    "Take final room photos",
+    "Complete dorm inspection",
+  ],
+  groups: [
+    { id: "g303",   label: "Room 303",                members: 4, kind: "Single room", color: "#16A34A" },
+    { id: "g3f",    label: "3F Study Group",          members: 8, kind: "Floor",       color: "#3B82F6" },
+    { id: "g304s",  label: "Room 303 + 304 Supplies", members: 8, kind: "Multi-room",  color: "#F59E0B" },
+  ],
+  members: [
+    { id: "alex",  name: "Alex",  room: "303", color: "#16A34A" },
+    { id: "brian", name: "Brian", room: "303", color: "#F59E0B" },
+    { id: "chris", name: "Chris", room: "303", color: "#3B82F6" },
+    { id: "david", name: "David", room: "303", color: "#A855F7" },
+  ],
+  expenses: [
+    { id: "x1", label: "Toilet paper",       amount: 120, by: "Alex",  when: "Mon" },
+    { id: "x2", label: "Trash bags",         amount:  60, by: "Chris", when: "Tue" },
+    { id: "x3", label: "Laundry detergent",  amount: 180, by: "Alex",  when: "Wed" },
+    { id: "x4", label: "Cleaning supplies",  amount: 100, by: "Brian", when: "Thu" },
+  ],
+  chores: [
+    { id: "c1", task: "Take out trash",        owner: "brian", due: "Today",    icon: "trash",  done: false },
+    { id: "c2", task: "Sweep floor",           owner: "chris", due: "Tomorrow", icon: "broom",  done: false },
+    { id: "c3", task: "Clean shared desk",     owner: "david", due: "Today",    icon: "focus",  done: true  },
+    { id: "c4", task: "Organize mini fridge",  owner: "alex",  due: "Sunday",   icon: "fridge", done: false },
+  ],
+  nudgesSeed: [
+    { id: "n1", category: "Alarm", text: "Please turn off alarms quickly in the morning.", when: "2 days ago", count: 3 },
+    { id: "n2", category: "Noise", text: "Please keep keyboard noise low during quiet hours.", when: "Yesterday", count: 1 },
+  ],
+  vibes: {
+    alex:  { status: "sleeping", until: "08:00", note: "Class at 8 AM" },
+    brian: { status: "gaming",   until: "23:30", note: "Valorant ranked" },
+    chris: { status: "focus",    until: "23:00", note: "Exam tomorrow" },
+    david: { status: "open",     until: "—",     note: "Free to chat" },
+  },
+};
+
+/* Phrase neutralizer — small dictionary so the demo is honest about the
+ * mechanism (front-end mapping, not LLM). */
+const NUDGE_DICT = {
+  alarm: "Please turn off alarms quickly in the morning.",
+  鬧鐘: "Please turn off alarms quickly in the morning.",
+  noise: "Please keep general noise low during quiet hours.",
+  keyboard: "Please keep keyboard noise low during quiet hours.",
+  鍵盤: "Please keep keyboard noise low during quiet hours.",
+  game: "Please keep game audio at a respectful level after 22:00.",
+  smell: "Please consider airing out the room when something has a strong smell.",
+  trash: "Please take out the trash on your scheduled day.",
+  desk: "Please tidy your desk area when shared space is impacted.",
+  light: "Please dim or turn off the main light after midnight.",
+  visitor: "Please give roommates a heads-up before bringing a visitor over.",
+};
+function neutralize(input) {
+  if (!input || !input.trim()) return "";
+  const lower = input.toLowerCase();
+  for (const k of Object.keys(NUDGE_DICT)) {
+    if (lower.includes(k)) return NUDGE_DICT[k];
+  }
+  return "Please be considerate of roommates regarding: " + input.trim();
+}
+
+/* =========================================================================
+ *  Status colors / pills
+ * =======================================================================*/
+const COLORS = {
+  ok:     { bg: "#DCFCE7", fg: "#166534", dot: "#16A34A", label: "Available" },
+  busy:   { bg: "#FEF3C7", fg: "#92400E", dot: "#F59E0B", label: "In use" },
+  warn:   { bg: "#FFEDD5", fg: "#9A3412", dot: "#EA580C", label: "Crowded" },
+  err:    { bg: "#FEE2E2", fg: "#991B1B", dot: "#DC2626", label: "Out of service" },
+};
+const STATUS_MAP = {
+  available: COLORS.ok,
+  in_use:    COLORS.busy,
+  occupied:  COLORS.busy,
+  low:       COLORS.ok,
+  crowded:   COLORS.warn,
+  broken:    COLORS.err,
+};
+const REPORT_PILL = {
+  Pending:       { bg: "#FEF3C7", fg: "#92400E" },
+  "In progress": { bg: "#DBEAFE", fg: "#1E40AF" },
+  Fixed:         { bg: "#DCFCE7", fg: "#166534" },
+};
+
+function StatusDot({ status }) {
+  const c = STATUS_MAP[status] || COLORS.ok;
+  return <span style={{
+    display: "inline-block", width: 8, height: 8, borderRadius: 99, background: c.dot,
+    boxShadow: `0 0 0 3px ${c.dot}22`,
+  }} />;
+}
+function Pill({ status, children }) {
+  const c = STATUS_MAP[status] || COLORS.ok;
+  return <span style={{
+    fontSize: 11, fontWeight: 600, padding: "3px 8px", borderRadius: 99,
+    background: c.bg, color: c.fg, letterSpacing: 0.2,
+  }}>{children || c.label}</span>;
+}
+
+/* =========================================================================
+ *  PAGE HEADER (each screen) — Home button lives top-left, page title centered.
+ * =======================================================================*/
+function PageHeader({ title, subtitle, onHome, onBack, right, color = "#0F172A" }) {
+  return (
+    <div data-current-title={title}
+      style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "10px 18px 8px", gap: 10,
+      }}>
+      <button onClick={onBack || onHome} aria-label={onBack ? "Back" : "Home"}
+        style={{
+          width: 40, height: 40, borderRadius: 12, border: "none", cursor: "pointer",
+          background: onBack ? "#F1F5F9" : "rgba(22, 163, 74, 0.1)",
+          color: onBack ? "#0F172A" : "#16A34A",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          flexShrink: 0,
+        }}>
+        <Icon d={onBack ? ICONS.arrowL : ICONS.home} size={20} stroke={2} />
+      </button>
+      <div style={{ flex: 1, textAlign: "center", minWidth: 0 }}>
+        <div style={{ fontSize: 17, fontWeight: 700, color, letterSpacing: -0.2,
+                      whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {title}
+        </div>
+        {subtitle && <div style={{ fontSize: 11, color: "#64748B", marginTop: 1 }}>{subtitle}</div>}
+      </div>
+      <div style={{ width: 40, display: "flex", justifyContent: "flex-end" }}>{right}</div>
+    </div>
+  );
+}
+
+/* =========================================================================
+ *  SCREEN: HOME
+ * =======================================================================*/
+function HomeScreen({ go, openGroup }) {
+  const items = [
+    { icon: "wash",   text: "Washer 2 is available",          tag: "Laundry",  color: "#16A34A", action: () => go("dorm") },
+    { icon: "events", text: "Movie Night starts at 20:00",    tag: "Events",   color: "#3B82F6", action: () => go("events") },
+    { icon: "trash",  text: "2F Trash Bin is full",           tag: "Reports",  color: "#DC2626", action: () => go("reports") },
+    { icon: "moon",   text: "Quiet Mode at 23:30",            tag: "Room 303", color: "#4F46E5", action: () => openGroup("g303") },
+    { icon: "wallet", text: "Brian still owes NT$115",        tag: "Ledger",   color: "#16A34A", action: () => openGroup("g303") },
+  ];
+  const quick = [
+    { label: "Find washer",    icon: "wash",    color: "#16A34A", action: () => go("dorm") },
+    { label: "Report issue",   icon: "reports", color: "#DC2626", action: () => go("reports") },
+    { label: "Room 303",       icon: "groups",  color: "#4F46E5", action: () => openGroup("g303") },
+  ];
+  return (
+    <>
+      <PageHeader title="Today at Dorm OS" subtitle={`Hi ${MOCK.user.name} · Room ${MOCK.user.room}`}
+        onHome={() => go("home")} />
+      <div style={{ padding: "0 18px 14px" }}>
+        {/* Hero summary card */}
+        <div style={{
+          background: "linear-gradient(135deg, #F0FDF4 0%, #DCFCE7 100%)",
+          color: "#14532D", border: "1px solid #BBF7D0",
+          borderRadius: 18, padding: 18, marginBottom: 14,
+        }}>
+          <div style={{ fontSize: 10, letterSpacing: 0.18 * 14,
+                        textTransform: "uppercase", color: "#16A34A", fontWeight: 700 }}>
+            Wed · Now
+          </div>
+          <div style={{ fontSize: 22, fontWeight: 600, marginTop: 4, fontFamily: 'inherit',
+                        color: "#1F2937", lineHeight: 1.3 }}>
+            <em style={{ fontStyle: "italic", color: "#16A34A" }}>2 washers</em> free,&nbsp;
+            <em style={{ fontStyle: "italic", color: "#D97706" }}>1 issue</em> pending,&nbsp;
+            <em style={{ fontStyle: "italic", color: "#2563EB" }}>Movie Night</em> in 1h 22m.
+          </div>
+          <div style={{ display: "flex", gap: 12, marginTop: 14, fontSize: 11, color: "#15803D", opacity: 0.85 }}>
+            <span>● 4 roommates online</span>
+            <span>● Quiet Mode 23:30</span>
+          </div>
+        </div>
+
+        {/* Today list */}
+        <SectionLabel>Today</SectionLabel>
+        <div style={{ background: "white", borderRadius: 16, overflow: "hidden",
+                      border: "1px solid #E2E8F0" }}>
+          {items.map((it, i) => (
+            <button key={i} onClick={it.action} style={{
+              display: "flex", alignItems: "center", gap: 12, width: "100%",
+              padding: "11px 14px", background: "white", border: "none", textAlign: "left",
+              borderTop: i === 0 ? "none" : "1px solid #F1F5F9", cursor: "pointer",
+            }}>
+              <div style={{
+                width: 32, height: 32, borderRadius: 10, flexShrink: 0,
+                background: it.color + "1A", color: it.color,
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                <Icon d={ICONS[it.icon]} size={16} stroke={2} />
+              </div>
+              <div style={{ flex: 1, fontSize: 13.5, color: "#0F172A", fontWeight: 500 }}>{it.text}</div>
+              <span style={{ fontSize: 10, color: "#94A3B8", fontWeight: 600,
+                             letterSpacing: 0.04 * 12, textTransform: "uppercase" }}>{it.tag}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Quick actions */}
+        <SectionLabel style={{ marginTop: 18 }}>Quick actions</SectionLabel>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+          {quick.map((q, i) => (
+            <button key={i} onClick={q.action} style={{
+              padding: "14px 10px", borderRadius: 14, background: "white",
+              border: "1px solid #E2E8F0", cursor: "pointer", textAlign: "center",
+            }}>
+              <div style={{
+                width: 36, height: 36, borderRadius: 10,
+                background: q.color + "1A", color: q.color,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                margin: "0 auto 8px",
+              }}>
+                <Icon d={ICONS[q.icon]} size={18} stroke={2} />
+              </div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "#0F172A" }}>{q.label}</div>
+            </button>
+          ))}
+        </div>
+
+        <div style={{ height: 90 }} />
+      </div>
+    </>
+  );
+}
+
+function SectionLabel({ children, style }) {
+  return (
+    <div style={{
+      fontSize: 10, letterSpacing: 0.16 * 12, textTransform: "uppercase",
+      color: "#94A3B8", fontWeight: 700, margin: "12px 4px 8px", ...style,
+    }}>{children}</div>
+  );
+}
+
+/* =========================================================================
+ *  SCREEN: DORM (laundry + facilities)
+ * =======================================================================*/
+function DormScreen({ go }) {
+  return (
+    <>
+      <PageHeader title="Dorm" subtitle="Public facility status · Live"
+        onHome={() => go("home")} />
+      <div style={{ padding: "0 18px" }}>
+        <SectionLabel>Laundry · Basement</SectionLabel>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+          {MOCK.laundry.map(m => {
+            const c = STATUS_MAP[m.status];
+            return (
+              <div key={m.id} style={{
+                background: "white", border: "1px solid #E2E8F0", borderRadius: 14,
+                padding: 12, position: "relative",
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                  <Icon d={ICONS.wash} size={18} color={c.dot} stroke={1.7} />
+                  <StatusDot status={m.status} />
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "#0F172A" }}>{m.label}</div>
+                <div style={{ fontSize: 11, color: "#64748B", marginTop: 2,
+                              fontFeatureSettings: "'tnum'" }}>
+                  {m.status === "available" && "Ready · open the door"}
+                  {m.status === "in_use"    && `In use · ${m.left} min left`}
+                  {m.status === "broken"    && "Out of service · reported"}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <SectionLabel style={{ marginTop: 18 }}>Showers &amp; Toilets · 3F</SectionLabel>
+        <div style={{ background: "white", borderRadius: 14, border: "1px solid #E2E8F0",
+                      overflow: "hidden" }}>
+          {MOCK.facility.slice(0, 3).map((f, i) => {
+            const c = STATUS_MAP[f.status];
+            return (
+              <div key={f.id} style={{
+                display: "flex", alignItems: "center", gap: 12, padding: "13px 14px",
+                borderTop: i === 0 ? "none" : "1px solid #F1F5F9",
+              }}>
+                <div style={{
+                  width: 36, height: 36, borderRadius: 10,
+                  background: c.bg, color: c.fg,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}>
+                  <Icon d={ICONS[f.icon]} size={18} stroke={1.8} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: "#0F172A" }}>{f.label}</div>
+                </div>
+                <Pill status={f.status}>
+                  {f.status === "low" ? "Low traffic" : f.status === "crowded" ? "Crowded" :
+                   f.status === "occupied" ? "Occupied" : "Available"}
+                </Pill>
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{ height: 90 }} />
+      </div>
+    </>
+  );
+}
+
+/* =========================================================================
+ *  SCREEN: EVENTS
+ * =======================================================================*/
+function EventsScreen({ go, joined, setJoined, toast }) {
+  const [detail, setDetail] = useState(null);
+  const list = MOCK.events;
+
+  const join = (id) => {
+    setJoined(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) { next.delete(id); toast("Left event"); }
+      else              { next.add(id);    toast("You're in. We'll remind you 30 min before."); }
+      return next;
+    });
+  };
+
+  return (
+    <>
+      <PageHeader title="Events" subtitle="This week"
+        onHome={() => go("home")} />
+      <div style={{ padding: "0 18px" }}>
+        {list.map(ev => {
+          const isJoined = joined.has(ev.id);
+          const count = ev.joined + (isJoined ? 1 : 0);
+          return (
+            <div key={ev.id} style={{
+              background: "white", border: "1px solid #E2E8F0", borderRadius: 14,
+              marginBottom: 10, overflow: "hidden",
+            }}>
+              <button onClick={() => setDetail(ev)} style={{
+                width: "100%", padding: 14, background: "transparent", border: "none",
+                textAlign: "left", cursor: "pointer", display: "flex", gap: 12,
+              }}>
+                <div style={{
+                  width: 44, height: 44, borderRadius: 12, flexShrink: 0,
+                  background: "#3B82F61A", color: "#3B82F6",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}>
+                  <Icon d={ICONS[ev.icon]} size={20} stroke={2} />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: "#0F172A" }}>{ev.title}</div>
+                    <div style={{ fontSize: 11, color: "#3B82F6", fontWeight: 600,
+                                  letterSpacing: 0.5 }}>{ev.day} · {ev.time.split(" – ")[0]}</div>
+                  </div>
+                  <div style={{ fontSize: 12, color: "#64748B", marginTop: 4 }}>
+                    {count} going
+                  </div>
+                </div>
+              </button>
+              <button onClick={() => join(ev.id)} style={{
+                width: "100%", padding: "10px 0", border: "none", cursor: "pointer",
+                borderTop: "1px solid #F1F5F9",
+                background: isJoined ? "#16A34A" : "transparent",
+                color:      isJoined ? "white"  : "#16A34A",
+                fontSize: 13, fontWeight: 600,
+              }}>{isJoined ? "✓ Joined" : "Join"}</button>
+            </div>
+          );
+        })}
+
+        <div style={{ height: 90 }} />
+      </div>
+
+      {detail && (
+        <Sheet onClose={() => setDetail(null)} title={detail.title}>
+          <div style={{ fontSize: 13, color: "#64748B", marginBottom: 4 }}>{detail.subtitle}</div>
+          <div style={{
+            display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, margin: "16px 0",
+          }}>
+            <Stat label="When" value={`${detail.day} · ${detail.time}`} />
+            <Stat label="Going" value={`${detail.joined}/${detail.cap}`} />
+            <Stat label="Host" value={detail.host} />
+            <Stat label="Cost" value="Free" />
+          </div>
+          <p style={{ fontSize: 13, color: "#334155", lineHeight: 1.55, marginBottom: 14 }}>
+            Show up and enjoy. Drinks and snacks are on Dorm Council.
+            Tap <em>Join</em> and we’ll send a quiet reminder 30 minutes before — no group-chat spam.
+          </p>
+          <button onClick={() => { join(detail.id); setDetail(null); }} style={{
+            width: "100%", padding: 14, background: "#16A34A", color: "white",
+            border: "none", borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: "pointer",
+          }}>{joined.has(detail.id) ? "Leave event" : "Join event"}</button>
+        </Sheet>
+      )}
+    </>
+  );
+}
+
+const iconBtn = {
+  width: 40, height: 40, borderRadius: 12, border: "none",
+  background: "#F1F5F9", color: "#0F172A", cursor: "pointer",
+  display: "flex", alignItems: "center", justifyContent: "center",
+};
+
+/* =========================================================================
+ *  SCREEN: REPORTS
+ * =======================================================================*/
+function ReportsScreen({ go, reports, setReports, toast }) {
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({ kind: "Trash", location: "2F", note: "" });
+
+  const submit = () => {
+    if (!form.note.trim()) { toast("Add a short description first"); return; }
+    const newReport = {
+      id: "r" + Math.random().toString(36).slice(2, 7),
+      title: `${form.location} ${form.kind}`,
+      note: form.note,
+      icon: form.kind === "Trash" ? "trash" : form.kind === "Light" ? "light" :
+            form.kind === "Laundry" ? "wash" : "vendor",
+      state: "Pending", time: "Just now", reporter: "You",
+    };
+    setReports([newReport, ...reports]);
+    setOpen(false);
+    setForm({ kind: "Trash", location: "2F", note: "" });
+    toast("Reported · staff will get a push within 5 min");
+  };
+
+  const visible = reports.slice(0, 3);
+
+  return (
+    <>
+      <PageHeader title="Reports" subtitle="What's broken, what's on the way"
+        onHome={() => go("home")}
+        right={<button onClick={() => setOpen(true)} style={iconBtn}>
+          <Icon d={ICONS.plus} size={20} stroke={2.2} />
+        </button>} />
+      <div style={{ padding: "0 18px" }}>
+        <div style={{
+          background: "white", borderRadius: 14, border: "1px solid #E2E8F0",
+          overflow: "hidden",
+        }}>
+          {visible.map((r, i) => {
+            const pill = REPORT_PILL[r.state];
+            return (
+              <div key={r.id} style={{
+                display: "flex", alignItems: "flex-start", gap: 12, padding: "12px 14px",
+                borderTop: i === 0 ? "none" : "1px solid #F1F5F9",
+              }}>
+                <div style={{
+                  width: 32, height: 32, borderRadius: 10, flexShrink: 0,
+                  background: pill.bg, color: pill.fg,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}>
+                  <Icon d={ICONS[r.icon]} size={16} stroke={1.8} />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 600, color: "#0F172A" }}>{r.title}</div>
+                    <span style={{
+                      fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 99,
+                      background: pill.bg, color: pill.fg, letterSpacing: 0.3, flexShrink: 0,
+                    }}>{r.state.toUpperCase()}</span>
+                  </div>
+                  <div style={{ fontSize: 12, color: "#64748B", marginTop: 2 }}>{r.note}</div>
+                  <div style={{ fontSize: 11, color: "#94A3B8", marginTop: 6 }}>
+                    {r.time} · by {r.reporter}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{ height: 90 }} />
+      </div>
+
+      {open && (
+        <Sheet onClose={() => setOpen(false)} title="New report">
+          <div style={{ fontSize: 12, color: "#64748B", marginBottom: 12 }}>
+            Goes straight to the on-shift staff queue. Photos optional.
+          </div>
+          <Field label="What is it?">
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {["Trash", "Light", "Laundry", "Vending", "Other"].map(k => (
+                <button key={k} onClick={() => setForm({ ...form, kind: k })} style={chip(form.kind === k)}>
+                  {k}
+                </button>
+              ))}
+            </div>
+          </Field>
+          <Field label="Where?">
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {["1F", "2F", "3F", "4F", "Basement", "Lounge"].map(k => (
+                <button key={k} onClick={() => setForm({ ...form, location: k })} style={chip(form.location === k)}>
+                  {k}
+                </button>
+              ))}
+            </div>
+          </Field>
+          <Field label="Description">
+            <textarea value={form.note} onChange={e => setForm({ ...form, note: e.target.value })}
+              placeholder="e.g. Trash bin overflowing, smells bad"
+              rows={3} style={textareaStyle} />
+          </Field>
+          <button onClick={() => toast("Camera not wired in this demo · would attach photo")} style={{
+            width: "100%", padding: 12, marginBottom: 10, borderRadius: 12,
+            border: "1px dashed #CBD5E1", background: "#F8FAFC", color: "#475569",
+            fontSize: 13, fontWeight: 500, cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+          }}>
+            <Icon d={ICONS.camera} size={16} stroke={2} /> Attach photo
+          </button>
+          <button onClick={submit} style={{
+            width: "100%", padding: 14, background: "#DC2626", color: "white",
+            border: "none", borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: "pointer",
+          }}>Submit report</button>
+        </Sheet>
+      )}
+    </>
+  );
+}
+
+function Field({ label, children }) {
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ fontSize: 11, fontWeight: 600, color: "#64748B",
+                    letterSpacing: 0.06 * 12, textTransform: "uppercase", marginBottom: 6 }}>{label}</div>
+      {children}
+    </div>
+  );
+}
+function chip(active) {
+  return {
+    padding: "7px 12px", borderRadius: 99, border: `1px solid ${active ? "#16A34A" : "#E2E8F0"}`,
+    background: active ? "#16A34A" : "white", color: active ? "white" : "#0F172A",
+    fontSize: 12, fontWeight: 600, cursor: "pointer",
+  };
+}
+const textareaStyle = {
+  width: "100%", padding: 12, borderRadius: 10, border: "1px solid #E2E8F0",
+  fontFamily: "inherit", fontSize: 13, color: "#0F172A",
+  resize: "vertical", outline: "none",
+};
+
+/* =========================================================================
+ *  SCREEN: GROUPS list + Room detail (sub-router)
+ * =======================================================================*/
+function GroupsScreen({ go, openGroup }) {
+  return (
+    <>
+      <PageHeader title="Groups" subtitle="Your rooms, floors, shared circles"
+        onHome={() => go("home")} />
+      <div style={{ padding: "0 18px" }}>
+        <SectionLabel>Your groups</SectionLabel>
+        {MOCK.groups.map(g => (
+          <button key={g.id} onClick={() => openGroup(g.id)} style={{
+            width: "100%", display: "flex", alignItems: "center", gap: 14,
+            background: "white", border: "1px solid #E2E8F0", borderRadius: 14,
+            padding: 14, marginBottom: 10, cursor: "pointer", textAlign: "left",
+          }}>
+            <div style={{
+              width: 44, height: 44, borderRadius: 12, flexShrink: 0,
+              background: g.color + "1A", color: g.color,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 16, fontWeight: 700, fontFamily: 'inherit',
+            }}>{g.label.replace(/[^0-9]/g, "").slice(0, 3) || g.label.slice(0, 2)}</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: "#0F172A" }}>{g.label}</div>
+              <div style={{ fontSize: 12, color: "#64748B", marginTop: 2 }}>
+                {g.kind} · {g.members} members
+              </div>
+            </div>
+            <Icon d={ICONS.arrowR} size={18} color="#94A3B8" />
+          </button>
+        ))}
+
+        <button onClick={() => alert("Demo: group-create flow stub")} style={{
+          width: "100%", padding: 14, background: "transparent",
+          border: "1.5px dashed #CBD5E1", borderRadius: 14, color: "#64748B",
+          fontSize: 13, fontWeight: 600, cursor: "pointer",
+          display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+        }}>
+          <Icon d={ICONS.plus} size={16} stroke={2} /> New group
+        </button>
+
+        <div style={{ height: 90 }} />
+      </div>
+    </>
+  );
+}
+
+/* Room 303 hub — entry to four widgets */
+function GroupRoomScreen({ go, groupId, sub, setSub, choreState, setChoreState,
+                          paid, setPaid, nudges, addNudge,
+                          vibe, setVibe, toast }) {
+  const group = MOCK.groups.find(g => g.id === groupId) || MOCK.groups[0];
+
+  const cards = [
+    { key: "ledger",  title: "Smart Ledger", subtitle: "NT$460 this month · 2 unpaid",
+      icon: "wallet", color: "#16A34A" },
+    { key: "chores",  title: "FairPlay Chores", subtitle: "3 open · Brian on trash today",
+      icon: "broom",  color: "#3B82F6" },
+    { key: "nudges",  title: "Anonymous Nudges", subtitle: `${nudges.length} active reminders`,
+      icon: "chat",   color: "#F59E0B" },
+    { key: "vibe",    title: "VibeSync", subtitle: "Quiet Mode 23:30 · Chris in focus",
+      icon: "moon",   color: "#4F46E5" },
+  ];
+
+  if (sub === "ledger") return (
+    <LedgerView go={go} group={group} paid={paid} setPaid={setPaid}
+                onBack={() => setSub(null)} toast={toast} />
+  );
+  if (sub === "chores") return (
+    <ChoresView go={go} group={group} choreState={choreState} setChoreState={setChoreState}
+                onBack={() => setSub(null)} toast={toast} />
+  );
+  if (sub === "nudges") return (
+    <NudgesView go={go} group={group} nudges={nudges} addNudge={addNudge}
+                onBack={() => setSub(null)} toast={toast} />
+  );
+  if (sub === "vibe") return (
+    <VibeView go={go} group={group} vibe={vibe} setVibe={setVibe}
+              onBack={() => setSub(null)} toast={toast} />
+  );
+
+  return (
+    <>
+      <PageHeader title={group.label} subtitle={`${group.members} members · ${group.kind}`}
+        onHome={() => go("home")} onBack={() => go("groups")} />
+      <div style={{ padding: "0 18px" }}>
+        {/* member row */}
+        <div style={{
+          background: "white", border: "1px solid #E2E8F0", borderRadius: 14,
+          padding: 14, marginBottom: 14,
+        }}>
+          <div style={{ fontSize: 11, letterSpacing: 0.16 * 12, textTransform: "uppercase",
+                        color: "#94A3B8", fontWeight: 700, marginBottom: 10 }}>Members</div>
+          <div style={{ display: "flex", gap: 10 }}>
+            {MOCK.members.map(m => (
+              <div key={m.id} style={{ flex: 1, textAlign: "center" }}>
+                <div style={{
+                  width: 38, height: 38, borderRadius: 99, margin: "0 auto 6px",
+                  background: m.color, color: "white",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontWeight: 700, fontSize: 14, fontFamily: 'inherit',
+                }}>{m.name[0]}</div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: "#0F172A" }}>{m.name}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <SectionLabel>Tools</SectionLabel>
+        {cards.map(c => (
+          <button key={c.key} onClick={() => setSub(c.key)} style={{
+            width: "100%", display: "flex", alignItems: "center", gap: 14,
+            background: "white", border: "1px solid #E2E8F0", borderRadius: 14,
+            padding: 14, marginBottom: 10, cursor: "pointer", textAlign: "left",
+          }}>
+            <div style={{
+              width: 40, height: 40, borderRadius: 12,
+              background: c.color + "1A", color: c.color,
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}>
+              <Icon d={ICONS[c.icon]} size={20} stroke={1.8} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: "#0F172A" }}>{c.title}</div>
+              <div style={{ fontSize: 12, color: "#64748B", marginTop: 2 }}>{c.subtitle}</div>
+            </div>
+            <Icon d={ICONS.arrowR} size={18} color="#94A3B8" />
+          </button>
+        ))}
+
+        <div style={{ height: 90 }} />
+      </div>
+    </>
+  );
+}
+
+/* ----- Smart Ledger ----- */
+function LedgerView({ go, group, paid, setPaid, onBack, toast }) {
+  const total = MOCK.expenses.reduce((s, e) => s + e.amount, 0);
+  const each  = Math.round(total / MOCK.members.length);
+
+  const togglePaid = (id) => {
+    const next = new Set(paid);
+    if (next.has(id)) next.delete(id);
+    else { next.add(id); toast(`${MOCK.members.find(m=>m.id===id).name} marked paid`); }
+    setPaid(next);
+  };
+
+  const unpaidCount = MOCK.members.filter(m => !paid.has(m.id)).length;
+
+  return (
+    <>
+      <PageHeader title="Smart Ledger" subtitle={group.label}
+        onHome={() => go("home")} onBack={onBack} />
+      <div style={{ padding: "0 18px" }}>
+        {/* Summary */}
+        <div style={{
+          background: "white", border: "1px solid #E2E8F0", borderRadius: 18,
+          padding: 18, marginBottom: 14,
+        }}>
+          <div style={{ fontSize: 11, letterSpacing: 0.18 * 12, textTransform: "uppercase",
+                        color: "#94A3B8", fontWeight: 700 }}>This month</div>
+          <div style={{ fontSize: 36, fontWeight: 600, color: "#0F172A",
+                        fontFamily: 'inherit',
+                        fontFeatureSettings: "'tnum'", marginTop: 2 }}>
+            NT$ {total}
+          </div>
+          <div style={{ fontSize: 13, color: "#64748B", marginTop: 4 }}>
+            Each person <b style={{ color: "#0F172A" }}>NT$ {each}</b> · {unpaidCount} unpaid
+          </div>
+
+          <div style={{ display: "flex", gap: 6, marginTop: 14 }}>
+            {MOCK.members.map(m => (
+              <div key={m.id} style={{
+                flex: 1, height: 6, borderRadius: 99,
+                background: paid.has(m.id) ? "#16A34A" : "#FEE2E2",
+              }} />
+            ))}
+          </div>
+        </div>
+
+        <SectionLabel>Expenses</SectionLabel>
+        <div style={{ background: "white", borderRadius: 14, border: "1px solid #E2E8F0",
+                      overflow: "hidden", marginBottom: 14 }}>
+          {MOCK.expenses.map((e, i) => (
+            <div key={e.id} style={{
+              display: "flex", alignItems: "center", gap: 12, padding: "11px 14px",
+              borderTop: i === 0 ? "none" : "1px solid #F1F5F9",
+            }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 600, color: "#0F172A" }}>{e.label}</div>
+                <div style={{ fontSize: 11, color: "#94A3B8", marginTop: 1 }}>
+                  Paid by {e.by} · {e.when}
+                </div>
+              </div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: "#0F172A",
+                            fontFeatureSettings: "'tnum'" }}>NT$ {e.amount}</div>
+            </div>
+          ))}
+          <button onClick={() => toast("Demo: expense form stub · would split automatically")} style={{
+            width: "100%", padding: 12, background: "#F8FAFC", border: "none",
+            borderTop: "1px solid #F1F5F9", color: "#16A34A",
+            fontSize: 13, fontWeight: 600, cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+          }}>
+            <Icon d={ICONS.plus} size={14} stroke={2.4} /> Add expense
+          </button>
+        </div>
+
+        <SectionLabel>Settle</SectionLabel>
+        <div style={{ background: "white", borderRadius: 14, border: "1px solid #E2E8F0",
+                      overflow: "hidden" }}>
+          {MOCK.members.map((m, i) => {
+            const isPaid = paid.has(m.id);
+            return (
+              <div key={m.id} style={{
+                display: "flex", alignItems: "center", gap: 12, padding: "11px 14px",
+                borderTop: i === 0 ? "none" : "1px solid #F1F5F9",
+              }}>
+                <div style={{
+                  width: 34, height: 34, borderRadius: 99, flexShrink: 0,
+                  background: m.color, color: "white",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontWeight: 700, fontSize: 13,
+                }}>{m.name[0]}</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 600, color: "#0F172A" }}>{m.name}</div>
+                  <div style={{ fontSize: 11, color: "#94A3B8", fontFeatureSettings: "'tnum'" }}>
+                    NT$ {each}
+                  </div>
+                </div>
+                <button onClick={() => togglePaid(m.id)} style={{
+                  padding: "6px 12px", borderRadius: 99, border: "none", cursor: "pointer",
+                  background: isPaid ? "#DCFCE7" : "#16A34A",
+                  color:      isPaid ? "#166534" : "white",
+                  fontSize: 11, fontWeight: 700, letterSpacing: 0.4,
+                }}>{isPaid ? "PAID" : "MARK PAID"}</button>
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{ height: 90 }} />
+      </div>
+    </>
+  );
+}
+
+/* ----- FairPlay Chores ----- */
+function ChoresView({ go, group, choreState, setChoreState, onBack, toast }) {
+  const list = MOCK.chores.map(c => ({ ...c, done: choreState[c.id] ?? c.done }));
+  const doneN = list.filter(c => c.done).length;
+
+  const flip = (id, alreadyDone) => {
+    setChoreState({ ...choreState, [id]: !alreadyDone });
+    toast(alreadyDone ? "Marked open again" : "Roommates can confirm now");
+  };
+
+  return (
+    <>
+      <PageHeader title="FairPlay Chores" subtitle={group.label}
+        onHome={() => go("home")} onBack={onBack} />
+      <div style={{ padding: "0 18px" }}>
+        <div style={{
+          background: "white", border: "1px solid #E2E8F0", borderRadius: 18,
+          padding: 16, marginBottom: 14,
+        }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+            <div>
+              <div style={{ fontSize: 11, letterSpacing: 0.18 * 12, textTransform: "uppercase",
+                            color: "#94A3B8", fontWeight: 700 }}>This week</div>
+              <div style={{ fontSize: 28, fontWeight: 600, color: "#0F172A",
+                            fontFamily: 'inherit',
+                            fontFeatureSettings: "'tnum'", marginTop: 2 }}>
+                {doneN}<span style={{ color: "#94A3B8" }}>/{list.length}</span>
+              </div>
+              <div style={{ fontSize: 12, color: "#64748B" }}>completed · auto-rotates next Mon</div>
+            </div>
+            <div style={{ width: 56, height: 56, position: "relative" }}>
+              <svg viewBox="0 0 36 36" style={{ width: "100%", height: "100%", transform: "rotate(-90deg)" }}>
+                <circle cx="18" cy="18" r="15.5" fill="none" stroke="#F1F5F9" strokeWidth="3" />
+                <circle cx="18" cy="18" r="15.5" fill="none" stroke="#16A34A" strokeWidth="3"
+                  strokeDasharray={`${(doneN / list.length) * 97.4} 97.4`} strokeLinecap="round" />
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        {list.map(c => {
+          const owner = MOCK.members.find(m => m.id === c.owner);
+          return (
+            <div key={c.id} style={{
+              background: "white", border: "1px solid #E2E8F0", borderRadius: 14,
+              padding: 14, marginBottom: 10,
+              display: "flex", alignItems: "center", gap: 12,
+              opacity: c.done ? 0.65 : 1,
+            }}>
+              <div style={{
+                width: 38, height: 38, borderRadius: 12, flexShrink: 0,
+                background: owner.color + "1A", color: owner.color,
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                <Icon d={ICONS[c.icon]} size={18} stroke={1.8} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: "#0F172A",
+                              textDecoration: c.done ? "line-through" : "none" }}>{c.task}</div>
+                <div style={{ fontSize: 11.5, color: "#64748B", marginTop: 2 }}>
+                  <b style={{ color: owner.color }}>{owner.name}</b> · Due {c.due}
+                </div>
+              </div>
+              <button onClick={() => flip(c.id, c.done)} style={{
+                width: 40, height: 40, borderRadius: 12, border: "none", cursor: "pointer",
+                background: c.done ? "#16A34A" : "#F1F5F9",
+                color:      c.done ? "white"   : "#94A3B8",
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                <Icon d={ICONS.check} size={18} stroke={2.4} />
+              </button>
+            </div>
+          );
+        })}
+
+        <button onClick={() => toast("Demo: photo verification stub")} style={{
+          width: "100%", padding: 12, marginTop: 6, borderRadius: 12,
+          border: "1px dashed #CBD5E1", background: "transparent", color: "#475569",
+          fontSize: 12.5, fontWeight: 500, cursor: "pointer",
+          display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+        }}>
+          <Icon d={ICONS.camera} size={14} stroke={2} /> Photo verification (optional)
+        </button>
+
+        <div style={{ height: 90 }} />
+      </div>
+    </>
+  );
+}
+
+/* ----- Anonymous Nudges ----- */
+function NudgesView({ go, group, nudges, addNudge, onBack, toast }) {
+  const [cat, setCat] = useState("Noise");
+  const [raw, setRaw] = useState("");
+  const preview = neutralize(raw);
+
+  const send = () => {
+    if (!raw.trim()) { toast("Type something first"); return; }
+    addNudge({ id: "n" + Date.now(), category: cat, text: preview, when: "Just now", count: 1 });
+    setRaw("");
+    toast("Sent · room sees a neutral phrase, not your name");
+  };
+
+  return (
+    <>
+      <PageHeader title="Anonymous Nudges" subtitle={group.label}
+        onHome={() => go("home")} onBack={onBack} />
+      <div style={{ padding: "0 18px" }}>
+        <SectionLabel>Send a nudge</SectionLabel>
+        <div style={{
+          background: "white", border: "1px solid #E2E8F0", borderRadius: 14,
+          padding: 14, marginBottom: 14,
+        }}>
+          <Field label="Category">
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {["Noise", "Alarm", "Smell", "Messy", "Visitor", "Light", "Other"].map(k => (
+                <button key={k} onClick={() => setCat(k)} style={chip(cat === k)}>{k}</button>
+              ))}
+            </div>
+          </Field>
+          <Field label="What's bothering you?">
+            <textarea value={raw} onChange={e => setRaw(e.target.value)}
+              placeholder="e.g. 鬧鐘響太久 / keyboard too loud at night"
+              rows={2} style={textareaStyle} />
+          </Field>
+          {raw.trim() && (
+            <div style={{
+              padding: 12, borderRadius: 10, background: "#F0FDF4",
+              border: "1px solid #BBF7D0", marginBottom: 12,
+            }}>
+              <div style={{ fontSize: 10, letterSpacing: 0.18 * 12, textTransform: "uppercase",
+                            color: "#15803D", fontWeight: 700, marginBottom: 4 }}>
+                Room will see
+              </div>
+              <div style={{ fontSize: 13, color: "#14532D", fontStyle: "italic" }}>
+                “{preview}”
+              </div>
+            </div>
+          )}
+          <button onClick={send} style={{
+            width: "100%", padding: 12, background: "#F59E0B", color: "white",
+            border: "none", borderRadius: 12, fontSize: 13.5, fontWeight: 600, cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+          }}>
+            <Icon d={ICONS.send} size={16} stroke={2} /> Send anonymously
+          </button>
+        </div>
+
+        <SectionLabel>Active reminders</SectionLabel>
+        {nudges.map(n => (
+          <div key={n.id} style={{
+            background: "white", border: "1px solid #E2E8F0", borderRadius: 14,
+            padding: 14, marginBottom: 10, display: "flex", gap: 12,
+          }}>
+            <div style={{
+              width: 34, height: 34, borderRadius: 10, flexShrink: 0,
+              background: "#FEF3C7", color: "#92400E",
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}>
+              <Icon d={ICONS.bell} size={16} stroke={1.8} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, color: "#92400E",
+                               letterSpacing: 0.4 }}>{n.category.toUpperCase()}</span>
+                <span style={{ fontSize: 10, color: "#94A3B8" }}>{n.when}</span>
+              </div>
+              <div style={{ fontSize: 13, color: "#0F172A", marginTop: 4, lineHeight: 1.5 }}>
+                {n.text}
+              </div>
+              {n.count > 1 && (
+                <div style={{ fontSize: 11, color: "#94A3B8", marginTop: 6 }}>
+                  Repeated × {n.count}
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+
+        <div style={{ height: 90 }} />
+      </div>
+    </>
+  );
+}
+
+/* ----- VibeSync ----- */
+function VibeView({ go, group, vibe, setVibe, onBack, toast }) {
+  const STATES = {
+    sleeping: { label: "Sleeping",        icon: "zzz",   color: "#6366F1" },
+    gaming:   { label: "Gaming",          icon: "game",  color: "#A855F7" },
+    focus:    { label: "Deep Focus",      icon: "focus", color: "#16A34A" },
+    open:     { label: "Open to chat",    icon: "chat",  color: "#F59E0B" },
+    away:     { label: "Away",            icon: "away",  color: "#94A3B8" },
+    studying: { label: "Studying",        icon: "cup",   color: "#3B82F6" },
+    dnd:      { label: "Do not disturb",  icon: "moon",  color: "#4F46E5" },
+  };
+
+  const cycleSelf = () => {
+    const order = ["open", "studying", "focus", "gaming", "sleeping", "dnd", "away"];
+    const cur = vibe.alex.status;
+    const next = order[(order.indexOf(cur) + 1) % order.length];
+    setVibe({ ...vibe, alex: { ...vibe.alex, status: next, note: "You set this just now" } });
+    toast(`Status → ${STATES[next].label}`);
+  };
+
+  return (
+    <>
+      <PageHeader title="VibeSync" subtitle={group.label}
+        onHome={() => go("home")} onBack={onBack} />
+      <div style={{ padding: "0 18px" }}>
+        <div style={{
+          background: "linear-gradient(135deg, #EEF2FF 0%, #E0E7FF 100%)",
+          color: "#1E1B4B", border: "1px solid #C7D2FE",
+          borderRadius: 18, padding: 18, marginBottom: 14,
+        }}>
+          <div style={{ fontSize: 11, letterSpacing: 0.18 * 12, textTransform: "uppercase",
+                        color: "#6366F1", fontWeight: 700 }}>Tonight in Room {group.label.match(/\d+/)?.[0] || "303"}</div>
+          <div style={{ fontSize: 22, fontFamily: 'inherit',
+                        fontWeight: 600, marginTop: 4, lineHeight: 1.3, color: "#1E293B" }}>
+            <em style={{ fontStyle: "italic", color: "#16A34A" }}>Quiet Mode</em> starts at 23:30 because Alex has an 8 AM class.
+          </div>
+        </div>
+
+        <SectionLabel>Roommates</SectionLabel>
+        {MOCK.members.map(m => {
+          const v = vibe[m.id];
+          const s = STATES[v.status];
+          return (
+            <div key={m.id} style={{
+              background: "white", border: "1px solid #E2E8F0", borderRadius: 14,
+              padding: 14, marginBottom: 10, display: "flex", alignItems: "center", gap: 14,
+            }}>
+              <div style={{ position: "relative" }}>
+                <div style={{
+                  width: 44, height: 44, borderRadius: 99,
+                  background: m.color, color: "white",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontWeight: 700, fontSize: 16, fontFamily: 'inherit',
+                }}>{m.name[0]}</div>
+                <div style={{
+                  position: "absolute", right: -2, bottom: -2,
+                  width: 18, height: 18, borderRadius: 99,
+                  background: s.color, border: "2px solid white",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  color: "white",
+                }}>
+                  <Icon d={ICONS[s.icon]} size={9} stroke={2.5} />
+                </div>
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: "#0F172A" }}>{m.name}</span>
+                  {m.id === "alex" && <span style={{ fontSize: 10, color: "#94A3B8" }}>(you)</span>}
+                </div>
+                <div style={{ fontSize: 12, color: s.color, fontWeight: 600, marginTop: 2 }}>
+                  {s.label}{v.until !== "—" ? ` · until ${v.until}` : ""}
+                </div>
+                <div style={{ fontSize: 11, color: "#94A3B8", marginTop: 1, fontStyle: "italic" }}>
+                  {v.note}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+
+        <button onClick={cycleSelf} style={{
+          width: "100%", padding: 14, marginTop: 6, borderRadius: 12,
+          background: "#4F46E5", color: "white",
+          border: "none", fontSize: 13.5, fontWeight: 600, cursor: "pointer",
+        }}>Set my status (cycle)</button>
+
+        <div style={{ height: 90 }} />
+      </div>
+    </>
+  );
+}
+
+/* =========================================================================
+ *  SCREEN: MOVE
+ * =======================================================================*/
+function MoveScreen({ go, moveState, setMoveState, toast }) {
+  const [tab, setTab] = useState("in");
+  const list = tab === "in" ? MOCK.moveIn : MOCK.moveOut;
+  const stateKey = tab === "in" ? "moveIn" : "moveOut";
+  const checked = moveState[stateKey] || new Set();
+  const doneN = checked.size;
+
+  const toggle = (i) => {
+    const next = new Set(checked);
+    if (next.has(i)) next.delete(i);
+    else { next.add(i); toast("Step done"); }
+    setMoveState({ ...moveState, [stateKey]: next });
+  };
+
+  return (
+    <>
+      <PageHeader title="Move" subtitle="Check in or check out, simply"
+        onHome={() => go("home")} />
+      <div style={{ padding: "0 18px" }}>
+        <div style={{ display: "flex", gap: 6, padding: 4, background: "#F1F5F9",
+                      borderRadius: 10, marginBottom: 14 }}>
+          {[{k:"in",l:"Move-in"},{k:"out",l:"Move-out"}].map(t => (
+            <button key={t.k} onClick={() => setTab(t.k)} style={{
+              flex: 1, padding: "7px 0", border: "none", borderRadius: 7,
+              fontSize: 12, fontWeight: 600, cursor: "pointer",
+              background: tab === t.k ? "white" : "transparent",
+              color:      tab === t.k ? "#0F172A" : "#64748B",
+              boxShadow:  tab === t.k ? "0 1px 3px rgba(15,23,42,0.06)" : "none",
+            }}>{t.l}</button>
+          ))}
+        </div>
+
+        <div style={{
+          background: "white", border: "1px solid #E2E8F0", borderRadius: 18,
+          padding: 16, marginBottom: 14,
+        }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+            <div>
+              <div style={{ fontSize: 11, letterSpacing: 0.18 * 12, textTransform: "uppercase",
+                            color: "#94A3B8", fontWeight: 700 }}>
+                {tab === "in" ? "Move-in checklist" : "Move-out checklist"}
+              </div>
+              <div style={{ fontSize: 28, fontWeight: 600, color: "#0F172A",
+                            fontFamily: 'inherit',
+                            fontFeatureSettings: "'tnum'", marginTop: 2 }}>
+                {doneN}<span style={{ color: "#94A3B8" }}>/{list.length}</span>
+              </div>
+            </div>
+            <div style={{ width: 100, height: 6, background: "#F1F5F9", borderRadius: 99,
+                          overflow: "hidden", alignSelf: "center" }}>
+              <div style={{ width: `${(doneN / list.length) * 100}%`, height: "100%",
+                            background: "#16A34A", transition: "width 0.3s" }} />
+            </div>
+          </div>
+        </div>
+
+        <div style={{ background: "white", border: "1px solid #E2E8F0", borderRadius: 14,
+                      overflow: "hidden", marginBottom: 14 }}>
+          {list.map((step, i) => {
+            const done = checked.has(i);
+            return (
+              <button key={i} onClick={() => toggle(i)} style={{
+                width: "100%", display: "flex", alignItems: "center", gap: 12,
+                padding: "13px 14px", border: "none", background: "transparent",
+                borderTop: i === 0 ? "none" : "1px solid #F1F5F9",
+                textAlign: "left", cursor: "pointer",
+              }}>
+                <div style={{
+                  width: 26, height: 26, borderRadius: 99, flexShrink: 0,
+                  border: done ? "none" : "2px solid #CBD5E1",
+                  background: done ? "#16A34A" : "transparent",
+                  color: "white", display: "flex", alignItems: "center", justifyContent: "center",
+                }}>
+                  {done && <Icon d={ICONS.check} size={14} stroke={3} />}
+                </div>
+                <div style={{ flex: 1, fontSize: 13.5,
+                              color: done ? "#94A3B8" : "#0F172A",
+                              textDecoration: done ? "line-through" : "none" }}>
+                  {step}
+                </div>
+                <span style={{ fontSize: 10, color: "#94A3B8", fontWeight: 600 }}>
+                  {String(i + 1).padStart(2, "0")}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        <button onClick={() => toast("Demo: room walkthrough photo capture stub")} style={{
+          width: "100%", padding: 14, borderRadius: 14, background: "#16A34A",
+          color: "white", border: "none", fontSize: 13.5, fontWeight: 600, cursor: "pointer",
+          display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+        }}>
+          <Icon d={ICONS.camera} size={16} stroke={2} />
+          {tab === "in" ? "Photograph existing damage" : "Photograph final state"}
+        </button>
+
+        <div style={{
+          marginTop: 14, padding: 14, borderRadius: 12,
+          background: "#F8FAFC", border: "1px dashed #CBD5E1",
+          fontSize: 12, color: "#475569", lineHeight: 1.55,
+        }}>
+          Photos timestamp themselves so disputes about damage and deposit don't
+          come down to memory.
+        </div>
+
+        <div style={{ height: 90 }} />
+      </div>
+    </>
+  );
+}
+
+/* =========================================================================
+ *  SHEETS / TAB BAR / TOAST
+ * =======================================================================*/
+function Sheet({ title, children, onClose }) {
+  return (
+    <div onClick={onClose} style={{
+      position: "absolute", inset: 0, background: "rgba(15,23,42,0.5)",
+      zIndex: 100, display: "flex", alignItems: "flex-end",
+      animation: "fadeIn 0.2s ease",
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        width: "100%", maxHeight: "85%",
+        background: "white", borderRadius: "18px 18px 0 0",
+        padding: 20, overflowY: "auto",
+        animation: "slideUp 0.25s ease",
+      }}>
+        <div style={{ width: 40, height: 4, background: "#CBD5E1",
+                      borderRadius: 99, margin: "0 auto 14px" }} />
+        <div style={{ display: "flex", justifyContent: "space-between",
+                      alignItems: "center", marginBottom: 8 }}>
+          <h3 style={{ fontSize: 18, fontWeight: 700, color: "#0F172A",
+                       fontFamily: 'inherit' }}>{title}</h3>
+          <button onClick={onClose} style={{ ...iconBtn, width: 32, height: 32 }}>
+            <Icon d="M18 6L6 18M6 6l12 12" size={16} stroke={2.4} />
+          </button>
+        </div>
+        {children}
+      </div>
+      <style>{`
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+      `}</style>
+    </div>
+  );
+}
+
+function Stat({ label, value }) {
+  return (
+    <div style={{
+      padding: 12, borderRadius: 10, background: "#F8FAFC",
+      border: "1px solid #E2E8F0",
+    }}>
+      <div style={{ fontSize: 10, letterSpacing: 0.16 * 12, textTransform: "uppercase",
+                    color: "#94A3B8", fontWeight: 700 }}>{label}</div>
+      <div style={{ fontSize: 13, fontWeight: 600, color: "#0F172A", marginTop: 4 }}>{value}</div>
+    </div>
+  );
+}
+
+function TabBar({ screen, go }) {
+  const tabs = [
+    { k: "dorm",    l: "Dorm",    icon: "dorm" },
+    { k: "events",  l: "Events",  icon: "events" },
+    { k: "reports", l: "Reports", icon: "reports" },
+    { k: "groups",  l: "Groups",  icon: "groups" },
+    { k: "move",    l: "Move",    icon: "move" },
+  ];
+  return (
+    <div style={{
+      position: "absolute", bottom: 0, left: 0, right: 0,
+      paddingBottom: 22, paddingTop: 8,
+      background: "rgba(255, 255, 255, 0.92)",
+      backdropFilter: "blur(20px)",
+      WebkitBackdropFilter: "blur(20px)",
+      borderTop: "1px solid #E2E8F0",
+      display: "flex", justifyContent: "space-around",
+      zIndex: 40,
+    }}>
+      {tabs.map(t => {
+        const active = screen === t.k;
+        return (
+          <button key={t.k} onClick={() => go(t.k)} style={{
+            flex: 1, background: "transparent", border: "none", cursor: "pointer",
+            display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
+            padding: "4px 0",
+            color: active ? "#16A34A" : "#94A3B8",
+          }}>
+            <Icon d={ICONS[t.icon]} size={22} stroke={active ? 2 : 1.6} />
+            <span style={{ fontSize: 10, fontWeight: 600,
+                           letterSpacing: 0.2, marginTop: 1 }}>{t.l}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/* =========================================================================
+ *  APP SHELL — gestures, state, toast, screen routing.
+ * =======================================================================*/
+const TAB_ORDER = ["dorm", "events", "reports", "groups", "move"];
+
+function DormOSApp() {
+  const [screen, setScreen]       = useState("home");
+  const [groupId, setGroupId]     = useState("g303");
+  const [groupSub, setGroupSub]   = useState(null);
+  const [joined, setJoined]       = useState(new Set(["e1"]));
+  const [reports, setReports]     = useState(MOCK.reports);
+  const [paid, setPaid]           = useState(new Set(["alex", "chris"]));
+  const [choreState, setChoreState] = useState({});
+  const [nudges, setNudges]       = useState(MOCK.nudgesSeed);
+  const [vibe, setVibe]           = useState(MOCK.vibes);
+  const [moveState, setMoveState] = useState({});
+  const [toastMsg, setToastMsg]   = useState("");
+  const [now, setNow]             = useState("9:41");
+
+  // status bar clock
+  useEffect(() => {
+    const update = () => {
+      const d = new Date();
+      setNow(`${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`);
+    };
+    update();
+    const id = setInterval(update, 30000);
+    return () => clearInterval(id);
+  }, []);
+
+  // toast
+  const toast = useCallback((msg) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(""), 2000);
+  }, []);
+
+  // helpers
+  const go = useCallback((target) => {
+    setGroupSub(null);
+    setScreen(target);
+  }, []);
+  const openGroup = useCallback((gid) => {
+    setGroupId(gid);
+    setGroupSub(null);
+    setScreen("group-room");
+  }, []);
+  const addNudge = (n) => setNudges(prev => [n, ...prev]);
+
+  // -- swipe / wheel / keyboard gesture handling --
+  // Horizontal swipe between tab screens; if inside a group sub-view or detail, swipe is disabled.
+  const swipeLockRef = useRef(false);
+  const swipeBetweenTabs = useCallback((dir) => {
+    if (swipeLockRef.current) return;
+    if (groupSub) return;
+    const tabIdx = TAB_ORDER.indexOf(screen);
+    if (tabIdx === -1) {
+      if (screen === "home") {
+        if (dir > 0) go("dorm");
+        return;
+      }
+      return;
+    }
+    const next = tabIdx + dir;
+    if (next < 0) { go("home"); return; }
+    if (next >= TAB_ORDER.length) return;
+    swipeLockRef.current = true;
+    setTimeout(() => { swipeLockRef.current = false; }, 280);
+    go(TAB_ORDER[next]);
+  }, [screen, groupSub, go]);
+
+  // keyboard
+  useEffect(() => {
+    const onKey = (e) => {
+      // ignore typing
+      if (e.target.matches("input, textarea")) return;
+      if (e.key === "ArrowLeft")  { e.preventDefault(); swipeBetweenTabs(-1); }
+      if (e.key === "ArrowRight") { e.preventDefault(); swipeBetweenTabs(+1); }
+      if (e.key === "h" || e.key === "H") { e.preventDefault(); go("home"); }
+      if (e.key === "Escape" && groupSub) { setGroupSub(null); }
+      if (e.key === "r" || e.key === "R") {
+        // soft reset — bring everything back to seed
+        setScreen("home"); setGroupSub(null);
+        setJoined(new Set(["e1"]));
+        setReports(MOCK.reports);
+        setPaid(new Set(["alex", "chris"]));
+        setChoreState({});
+        setNudges(MOCK.nudgesSeed);
+        setVibe(MOCK.vibes);
+        setMoveState({});
+        toast("Demo reset");
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [swipeBetweenTabs, groupSub, go, toast]);
+
+  // wheel — horizontal trackpad gestures (deltaX) translate to tab swipe
+  const wheelAccum = useRef(0);
+  const wheelLast  = useRef(0);
+  const onWheel = (e) => {
+    if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+      // horizontal scroll — swap tabs
+      e.preventDefault();
+      const now = Date.now();
+      if (now - wheelLast.current > 350) wheelAccum.current = 0;
+      wheelLast.current = now;
+      wheelAccum.current += e.deltaX;
+      if (Math.abs(wheelAccum.current) > 60) {
+        swipeBetweenTabs(wheelAccum.current > 0 ? +1 : -1);
+        wheelAccum.current = 0;
+      }
+    }
+    // vertical wheel — let it bubble to scrollable inner content
+  };
+
+  // pointer drag — mouse + touch
+  const dragState = useRef({ x: 0, y: 0, active: false, decided: null });
+  const onPointerDown = (e) => {
+    dragState.current = { x: e.clientX, y: e.clientY, active: true, decided: null };
+  };
+  const onPointerMove = (e) => {
+    if (!dragState.current.active) return;
+    const dx = e.clientX - dragState.current.x;
+    const dy = e.clientY - dragState.current.y;
+    if (dragState.current.decided === null && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) {
+      dragState.current.decided = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
+    }
+  };
+  const onPointerUp = (e) => {
+    if (!dragState.current.active) return;
+    const dx = e.clientX - dragState.current.x;
+    if (dragState.current.decided === "x" && Math.abs(dx) > 60) {
+      swipeBetweenTabs(dx < 0 ? +1 : -1);
+    }
+    dragState.current.active = false;
+  };
+
+  // render screen
+  let screenNode;
+  switch (screen) {
+    case "home":
+      screenNode = <HomeScreen go={go} openGroup={openGroup} />; break;
+    case "dorm":
+      screenNode = <DormScreen go={go} />; break;
+    case "events":
+      screenNode = <EventsScreen go={go} joined={joined} setJoined={setJoined} toast={toast} />; break;
+    case "reports":
+      screenNode = <ReportsScreen go={go} reports={reports} setReports={setReports} toast={toast} />; break;
+    case "groups":
+      screenNode = <GroupsScreen go={go} openGroup={openGroup} />; break;
+    case "group-room":
+      screenNode = <GroupRoomScreen go={go} groupId={groupId}
+                     sub={groupSub} setSub={setGroupSub}
+                     choreState={choreState} setChoreState={setChoreState}
+                     paid={paid} setPaid={setPaid}
+                     nudges={nudges} addNudge={addNudge}
+                     vibe={vibe} setVibe={setVibe}
+                     toast={toast} />; break;
+    case "move":
+      screenNode = <MoveScreen go={go} moveState={moveState} setMoveState={setMoveState} toast={toast} />; break;
+    default:
+      screenNode = <HomeScreen go={go} openGroup={openGroup} />;
+  }
+
+  const tabActive = TAB_ORDER.includes(screen) ? screen : (screen === "group-room" ? "groups" : null);
+
+  return (
+    <div className="phone-stage">
+      <IosFrame time={now} battery={87}>
+        <div
+          onWheel={onWheel}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerUp}
+          style={{
+            position: "absolute", inset: 0, background: "#F4F1EC",
+            overflow: "hidden", touchAction: "pan-y",
+          }}>
+          <div key={screen + (groupSub || "")}
+               style={{
+                 position: "absolute", inset: 0, overflowY: "auto",
+                 paddingBottom: 70,
+                 animation: "slideIn 0.22s ease",
+               }}>
+            {screenNode}
+          </div>
+          <TabBar screen={tabActive} go={go} />
+        </div>
+        {toastMsg && <div className="toast">{toastMsg}</div>}
+        <style>{`
+          @keyframes slideIn { from { opacity: 0; transform: translateX(8px); } to { opacity: 1; transform: translateX(0); } }
+        `}</style>
+      </IosFrame>
+    </div>
+  );
+}
+
+/* =========================================================================
+ *  Fit-to-viewport — keep the phone as large as it can be while always visible.
+ *  Phone outer box ≈ 423 × 884 (393 + 12*2 padding + 2*2 outline border).
+ * =======================================================================*/
+function useFitPhone() {
+  useEffect(() => {
+    const PHONE_W = 423, PHONE_H = 884;
+    const fit = () => {
+      const el = document.querySelector(".phone-stage");
+      if (!el) return;
+      const vw = window.innerWidth, vh = window.innerHeight;
+      const margin = 24;
+      const s = Math.min(1.4, (vw - margin) / PHONE_W, (vh - margin) / PHONE_H);
+      el.style.transform = `scale(${s.toFixed(3)})`;
+    };
+    fit();
+    window.addEventListener("resize", fit);
+    return () => window.removeEventListener("resize", fit);
+  }, []);
+}
+
+function Root() {
+  useFitPhone();
+  return <DormOSApp />;
+}
+
+/* mount */
+ReactDOM.createRoot(document.getElementById("app")).render(<Root />);
+</script>
+</body>
+</html>
