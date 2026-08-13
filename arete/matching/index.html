@@ -153,7 +153,6 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 }
 .result .remind strong { font-weight: 700; }
 .result .acts { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-.copied { color: var(--focus); font-size: .9rem; }
 
 @media (prefers-reduced-motion: reduce) {
     * { transition: none !important; }
@@ -461,41 +460,11 @@ function renderResult() {
         <div class="remind">請回到 119 級學弟妹填寫區表單，<strong>依照上面的志願序</strong>選擇對應的編號送出，志願 1 填編號 ${SENIORS[st.ranked[0]].no}，依此類推。</div>
         <div class="acts">
             ${formBtn}
-            <button class="btn" id="copyBtn">複製志願序</button>
             <button class="btn-ghost" id="editBtn">回上一步調整</button>
             <button class="btn-ghost" id="resetBtn">重新開始</button>
-            <span class="copied" id="copied" hidden>已複製</span>
         </div>
     </div>`;
     dealIn(view.querySelector(".result"), ".slip", 150);
-    $("copyBtn").onclick = () => {
-        const text = st.ranked.map((id, i) => `志願 ${i + 1}：編號 ${SENIORS[id].no}`).join("\n");
-        const tip = $("copied");
-        const done = () => {
-            tip.textContent = "已複製";
-            tip.hidden = false;
-            setTimeout(() => { tip.hidden = true; }, 2500);
-        };
-        const fail = () => {
-            tip.textContent = "複製失敗，請直接抄寫上面的編號";
-            tip.hidden = false;
-        };
-        const manual = () => {
-            const ta = document.createElement("textarea");
-            ta.value = text;
-            ta.setAttribute("readonly", "");
-            ta.style.position = "fixed";
-            ta.style.left = "-9999px";
-            document.body.appendChild(ta);
-            ta.select();
-            let ok = false;
-            try { ok = document.execCommand("copy"); } catch (e) {}
-            ta.remove();
-            ok ? done() : fail();
-        };
-        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done).catch(manual);
-        else manual();
-    };
     $("editBtn").onclick = () => { st.screen = "s2"; render(); };
     armReset($("resetBtn"));
 }
