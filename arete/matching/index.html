@@ -184,7 +184,6 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 const SENIORS = Array.isArray(window.BAICHUAN_SENIORS) ? window.BAICHUAN_SENIORS : [];
 const HUES = ["#2e7d8c", "#3a5ba0", "#3e7561", "#5f7a46", "#8c6a3f", "#9c5a47", "#a34f5e", "#6d5d8f"];
 const PICK1 = 10, PICK2 = 5;
-const FORM_URL = "";
 const KEY = "baichuan119-zhishu";
 
 const $ = id => document.getElementById(id);
@@ -451,7 +450,6 @@ function renderResult() {
             <span class="num"><small>編號</small>${SENIORS[id].no}</span>
             <span class="meta">${esc(SENIORS[id].core)}${SENIORS[id].mbti ? "・" + esc(SENIORS[id].mbti) : ""}</span>
         </div>`).join("");
-    const formBtn = FORM_URL ? `<a class="btn" href="${FORM_URL}" target="_blank" rel="noopener">前往表單</a>` : "";
     view.innerHTML = `
     <div class="result">
         <h2 class="disp">你的志願序</h2>
@@ -459,7 +457,6 @@ function renderResult() {
         ${slips}
         <div class="remind">請回到 119 級學弟妹填寫區表單，<strong>依照上面的志願序</strong>選擇對應的編號送出，志願 1 填編號 ${SENIORS[st.ranked[0]].no}，依此類推。</div>
         <div class="acts">
-            ${formBtn}
             <button class="btn-ghost" id="editBtn">回上一步調整</button>
             <button class="btn-ghost" id="resetBtn">重新開始</button>
         </div>
