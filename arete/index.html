@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NYCU-Chung</title>
+    <title>NYCU-Chung - arete</title>
     <style>
         :root {
             --bg: #0d1117;
@@ -94,9 +94,6 @@
         .file-icon.folder {
             color: #54aeff;
         }
-        .file-icon.file {
-            color: var(--icon-file);
-        }
         .file-name {
             flex: 1;
             color: var(--link);
@@ -109,11 +106,6 @@
             color: var(--text-muted);
             font-size: 0.85rem;
             text-align: right;
-        }
-        .empty-state {
-            text-align: center;
-            padding: 3rem 1rem;
-            color: var(--text-muted);
         }
         .footer {
             margin-top: 2rem;
@@ -145,29 +137,16 @@
         </div>
 
         <div class="breadcrumb">
-            <span class="current">root</span>
+            <a href="../">root</a>
+            <span class="separator">/</span>
+            <span class="current">arete</span>
         </div>
 
         <div class="file-list">
-            <a href="./arete/" class="file-item">
+            <a href="./matching/" class="file-item">
                 <span class="file-icon folder">📁</span>
-                <span class="file-name">arete</span>
-                <span class="file-desc">百川學程</span>
-            </a>
-            <a href="./demo/" class="file-item">
-                <span class="file-icon folder">📁</span>
-                <span class="file-name">demo</span>
-                <span class="file-desc">產品原型展示</span>
-            </a>
-            <a href="./game/" class="file-item">
-                <span class="file-icon folder">📁</span>
-                <span class="file-name">game</span>
-                <span class="file-desc">互動遊戲</span>
-            </a>
-            <a href="./tools/" class="file-item">
-                <span class="file-icon folder">📁</span>
-                <span class="file-name">tools</span>
-                <span class="file-desc">實用工具集</span>
+                <span class="file-name">matching</span>
+                <span class="file-desc">百川 119 級抽直屬志願選填</span>
             </a>
         </div>
 

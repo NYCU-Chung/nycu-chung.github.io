@@ -39,7 +39,7 @@ jobs:
 
       - name: Inject Baichuan seniors data
         run: |
-          cat > baichuan/config.js << 'SCRIPT'
+          cat > arete/matching/config.js << 'SCRIPT'
           window.BAICHUAN_SENIORS = ${{ secrets.BAICHUAN_SENIORS }};
           SCRIPT
 
