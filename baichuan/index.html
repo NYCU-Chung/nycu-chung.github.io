@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>百川 119 級抽直屬</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Iansui&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+:root {
+    --paper: #f2f6f8;
+    --ink: #17242f;
+    --muted: #5c6b77;
+    --line: #d8e1e7;
+    --card: #ffffff;
+    --focus: #2e7d8c;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+    font-family: 'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+    line-height: 1.65;
+    min-height: 100vh;
+}
+.disp { font-family: 'Iansui', 'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', sans-serif; font-weight: 400; }
+button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+
+.wrap { max-width: 1080px; margin: 0 auto; padding: 0 16px 96px; }
+
+.topbar {
+    position: sticky; top: 0; z-index: 30;
+    background: var(--paper);
+    background: color-mix(in srgb, var(--paper) 88%, transparent);
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+    border-bottom: 1px solid var(--line);
+}
+.topbar-in {
+    max-width: 1080px; margin: 0 auto; padding: 10px 16px;
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+}
+.topbar .stage-name { font-size: 1.05rem; letter-spacing: .04em; }
+.topbar .count { font-variant-numeric: tabular-nums; color: var(--muted); font-size: .95rem; }
+.topbar .count strong { color: var(--ink); font-size: 1.15rem; }
+.topbar .grow { flex: 1; }
+.btn {
+    display: inline-block; padding: 9px 20px; border-radius: 999px;
+    background: var(--ink); color: #fff; font-weight: 500; letter-spacing: .06em;
+    transition: opacity .15s;
+}
+.btn:disabled { opacity: .35; cursor: not-allowed; }
+.btn-ghost { background: none; color: var(--muted); padding: 9px 8px; text-decoration: underline; text-underline-offset: 3px; }
+.btn-ghost:hover { color: var(--ink); }
+
+/* 開場 */
+.intro { max-width: 620px; margin: 0 auto; padding-top: 9vh; }
+.intro .eyebrow { color: var(--focus); font-size: .78rem; font-weight: 700; letter-spacing: .28em; margin-bottom: 12px; }
+.intro h1 { font-size: clamp(2rem, 6vw, 2.8rem); letter-spacing: .12em; line-height: 1.3; }
+.intro .sub { color: var(--muted); margin: 4px 0 28px; letter-spacing: .06em; }
+.intro p.lead { margin-bottom: 24px; }
+.steps { border-top: 1px solid var(--line); }
+.steps > div { display: flex; gap: 18px; padding: 14px 2px; border-bottom: 1px solid var(--line); }
+.steps .tag { flex-shrink: 0; width: 5.2em; color: var(--focus); letter-spacing: .08em; }
+.steps .txt { color: var(--ink); }
+.intro .note { color: var(--muted); font-size: .9rem; margin-top: 16px; }
+.intro .cta { margin-top: 32px; }
+.intro .cta .btn { padding: 13px 44px; font-size: 1.05rem; }
+
+/* 卡片 */
+.hint { color: var(--muted); font-size: .92rem; padding: 14px 2px 10px; }
+.grid { column-gap: 14px; }
+@media (min-width: 640px) { .grid { columns: 2; } }
+@media (min-width: 960px) { .grid { columns: 3; } }
+.card {
+    display: block; width: 100%; text-align: left;
+    background: var(--card); border: 1px solid var(--line); border-top: 4px solid var(--hue, var(--focus));
+    border-radius: 10px; padding: 14px 16px 12px;
+    margin-bottom: 14px; break-inside: avoid;
+    position: relative;
+    transition: transform .18s, box-shadow .18s, opacity .3s, background .18s;
+}
+.card:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(23, 36, 47, .08); }
+.card.on {
+    background: color-mix(in srgb, var(--hue) 7%, #fff);
+    box-shadow: inset 0 0 0 2px var(--hue);
+}
+.card .core {
+    display: inline-block; color: var(--hue); font-weight: 700;
+    font-size: .82rem; letter-spacing: .06em; margin-bottom: 6px;
+}
+.card .ln { display: block; padding: 3px 0; font-size: .95rem; }
+.card .ln + .ln { border-top: 1px dashed color-mix(in srgb, var(--line) 60%, transparent); }
+.card .mbti {
+    display: inline-block; margin-top: 8px; padding: 1px 9px;
+    border: 1px solid var(--hue); border-radius: 999px;
+    color: var(--hue); font-size: .78rem; font-weight: 700; letter-spacing: .1em;
+}
+.card .mark {
+    position: absolute; top: 10px; right: 12px;
+    color: var(--hue); font-weight: 700; font-size: .82rem; letter-spacing: .06em;
+    opacity: 0; transition: opacity .15s;
+}
+.card.on .mark { opacity: 1; }
+.deal .card, .deal .slip { opacity: 0; transform: translateY(10px); pointer-events: none; }
+.deal .card.in, .deal .slip.in { opacity: 1; transform: none; pointer-events: auto; }
+
+/* 志願列 */
+.tray {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+    background: #fff; border-top: 1px solid var(--line);
+    box-shadow: 0 -6px 24px rgba(23, 36, 47, .07);
+}
+.tray-in { max-width: 1080px; margin: 0 auto; padding: 10px 16px; display: flex; gap: 8px; align-items: center; overflow-x: auto; }
+.tray .slot {
+    flex-shrink: 0; display: flex; align-items: center; gap: 6px;
+    border: 1px dashed var(--line); border-radius: 8px; padding: 5px 8px;
+    font-size: .85rem; color: var(--muted); min-height: 38px;
+}
+.tray .slot.full { border-style: solid; border-color: var(--hue); color: var(--ink); background: color-mix(in srgb, var(--hue) 7%, #fff); }
+.tray .slot .no { color: var(--hue); font-weight: 700; }
+.tray .slot .t { max-width: 7.5em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tray .slot button { padding: 2px 4px; color: var(--muted); border-radius: 4px; line-height: 1; }
+.tray .slot button:hover { color: var(--ink); background: var(--paper); }
+
+/* 結果 */
+.result { max-width: 560px; margin: 0 auto; padding-top: 7vh; }
+.result h2 { font-size: clamp(1.7rem, 5vw, 2.2rem); letter-spacing: .12em; margin-bottom: 6px; }
+.result .sub { color: var(--muted); margin-bottom: 26px; }
+.slip {
+    position: relative; display: flex; align-items: center; gap: 18px;
+    background: #fff; border: 1px solid var(--line); border-left: 6px solid var(--hue);
+    border-radius: 8px; padding: 14px 20px 14px 30px; margin-bottom: 12px;
+    transition: opacity .35s, transform .35s;
+}
+.slip::before {
+    content: ''; position: absolute; left: 12px; top: 50%; margin-top: -5px;
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--paper); box-shadow: inset 0 0 0 1.5px var(--line);
+}
+.slip .rank { width: 4.6em; flex-shrink: 0; color: var(--hue); font-size: 1.15rem; letter-spacing: .1em; }
+.slip .num { font-size: 2.4rem; font-weight: 900; font-variant-numeric: tabular-nums; letter-spacing: .02em; white-space: nowrap; }
+.slip .num small { font-size: .85rem; font-weight: 500; color: var(--muted); margin-right: 6px; letter-spacing: .08em; }
+.slip .meta { margin-left: auto; text-align: right; color: var(--muted); font-size: .82rem; max-width: 40%; }
+@media (max-width: 480px) { .slip { gap: 12px; padding-right: 14px; } .slip .num { font-size: 2rem; } .slip .rank { width: 4em; } }
+.result .remind {
+    border: 1px solid var(--line); border-radius: 8px; background: #fff;
+    padding: 14px 18px; margin: 24px 0; font-size: .95rem;
+}
+.result .remind strong { font-weight: 700; }
+.result .acts { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.copied { color: var(--focus); font-size: .9rem; }
+
+@media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; }
+    .deal .card, .deal .slip { opacity: 1; transform: none; pointer-events: auto; }
+}
+</style>
+</head>
+<body>
+
+<div class="topbar" id="topbar" hidden>
+    <div class="topbar-in">
+        <span class="stage-name disp" id="stageName"></span>
+        <span class="count" id="stageCount" aria-live="polite"></span>
+        <span class="grow"></span>
+        <button class="btn-ghost" id="resetTop">重新開始</button>
+        <button class="btn-ghost" id="backBtn" hidden>返回第一階段</button>
+        <button class="btn" id="nextBtn" disabled></button>
+    </div>
+</div>
+
+<div class="wrap" id="view"></div>
+
+<div class="tray" id="tray" hidden>
+    <div class="tray-in" id="trayIn"></div>
+</div>
+
+<script src="config.js"></script>
+<script>
+const SENIORS = Array.isArray(window.BAICHUAN_SENIORS) ? window.BAICHUAN_SENIORS : [];
+const HUES = ["#2e7d8c", "#3a5ba0", "#3e7561", "#5f7a46", "#8c6a3f", "#9c5a47", "#a34f5e", "#6d5d8f"];
+const PICK1 = 10, PICK2 = 5;
+const FORM_URL = "";
+const KEY = "baichuan119-zhishu";
+
+const $ = id => document.getElementById(id);
+const view = $("view"), topbar = $("topbar"), tray = $("tray");
+const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+
+function blank() {
+    return { v: 1, screen: "intro", picked: [], ranked: [], order1: [], hue1: {}, order2: [], hue2: {}, base2: [] };
+}
+
+function valid(s) {
+    if (!s || s.v !== 1 || !["intro", "s1", "s2", "result"].includes(s.screen)) return false;
+    const okId = x => Number.isInteger(x) && x >= 0 && x < SENIORS.length;
+    for (const k of ["picked", "ranked", "order1", "order2", "base2"])
+        if (!Array.isArray(s[k]) || !s[k].every(okId)) return false;
+    if (s.picked.length > PICK1 || s.ranked.length > PICK2) return false;
+    if (!s.ranked.every(x => s.picked.includes(x))) return false;
+    if ((s.screen === "s2" || s.screen === "result") && s.picked.length !== PICK1) return false;
+    if (s.screen === "result" && s.ranked.length !== PICK2) return false;
+    for (const k of ["hue1", "hue2"]) {
+        if (typeof s[k] !== "object" || s[k] === null || Array.isArray(s[k])) return false;
+        if (!Object.values(s[k]).every(h => HUES.includes(h))) return false;
+    }
+    return true;
+}
+
+function load() {
+    try {
+        const s = JSON.parse(localStorage.getItem(KEY));
+        return valid(s) ? s : null;
+    } catch (e) { return null; }
+}
+function save() { localStorage.setItem(KEY, JSON.stringify(st)); }
+
+let st = load() || blank();
+
+function shuffled(arr) {
+    const a = arr.slice();
+    for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+}
+function hueMap(order) {
+    const pool = shuffled(HUES);
+    const m = {};
+    order.forEach((id, i) => m[id] = pool[i % pool.length]);
+    return m;
+}
+
+function cardHTML(id, hue) {
+    const p = SENIORS[id];
+    const lines = p.lines.map(l => `<span class="ln">${esc(l)}</span>`).join("");
+    const mbti = p.mbti ? `<span class="mbti">${esc(p.mbti)}</span>` : "";
+    return `<button class="card" data-id="${id}" style="--hue:${hue}" aria-pressed="false">
+        <span class="mark" aria-hidden="true"></span>
+        <span class="core">${esc(p.core)}</span>
+        ${lines}${mbti}
+    </button>`;
+}
+
+function dealIn(container, sel, step) {
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    container.classList.add("deal");
+    const items = container.querySelectorAll(sel || ".card");
+    setTimeout(() => items.forEach((c, i) => setTimeout(() => c.classList.add("in"), Math.min(i * (step || 28), 700))), 30);
+    setTimeout(() => container.classList.remove("deal"), 1200);
+}
+
+// 兩段式重置：按一次要求確認，3 秒沒按第二次就恢復
+function armReset(btn) {
+    btn.onclick = () => {
+        if (btn.dataset.armed) {
+            localStorage.removeItem(KEY);
+            st = blank();
+            render();
+            return;
+        }
+        btn.dataset.armed = "1";
+        const old = btn.textContent;
+        btn.textContent = "確定重新開始？";
+        setTimeout(() => { delete btn.dataset.armed; btn.textContent = old; }, 3000);
+    };
+}
+
+function render() {
+    try { paint(); }
+    catch (e) {
+        localStorage.removeItem(KEY);
+        st = blank();
+        try { paint(); }
+        catch (e2) { view.textContent = "頁面發生問題，請重新整理。"; }
+    }
+}
+
+function paint() {
+    save();
+    topbar.hidden = st.screen === "intro" || st.screen === "result";
+    tray.hidden = st.screen !== "s2";
+    if (st.screen === "intro") renderIntro();
+    if (st.screen === "s1") renderS1();
+    if (st.screen === "s2") renderS2();
+    if (st.screen === "result") renderResult();
+    window.scrollTo(0, 0);
+}
+
+function renderIntro() {
+    view.innerHTML = `
+    <div class="intro">
+        <p class="eyebrow">NYCU ARETE HONORS PROGRAM</p>
+        <h1 class="disp">百川 119 級<br>抽直屬</h1>
+        <p class="sub">118 級學長姐介紹・志願選填</p>
+        <p class="lead">這裡有 ${SENIORS.length} 位學長姐的介紹。為了讓大家只憑介紹本身做選擇，卡片上不會出現姓名和編號，每個階段的排列順序和卡片顏色也都會重新洗牌。</p>
+        <div class="steps">
+            <div><span class="tag disp">第一階段</span><span class="txt">從 ${SENIORS.length} 位中留下 ${PICK1} 位</span></div>
+            <div><span class="tag disp">第二階段</span><span class="txt">從 ${PICK1} 位中依序選出志願 1 到 ${PICK2}</span></div>
+            <div><span class="tag disp">結果頁</span><span class="txt">取得 ${PICK2} 個編號，回到表單依志願序填入</span></div>
+        </div>
+        <p class="note">選到一半重新整理不會遺失進度，想全部重來也隨時可以。</p>
+        <div class="cta"><button class="btn" id="startBtn">開始選擇</button></div>
+    </div>`;
+    $("startBtn").onclick = () => {
+        st.screen = "s1";
+        if (!st.order1.length) {
+            st.order1 = shuffled(SENIORS.map((_, i) => i));
+            st.hue1 = hueMap(st.order1);
+        }
+        render();
+    };
+}
+
+function renderS1() {
+    $("stageName").textContent = "第一階段・留下 " + PICK1 + " 位";
+    $("backBtn").hidden = true;
+    armReset($("resetTop"));
+    const next = $("nextBtn");
+    next.textContent = "進入第二階段";
+    view.innerHTML = `
+        <p class="hint">點卡片選取，再點一次取消。留下 ${PICK1} 位後就能進入第二階段。</p>
+        <div class="grid" id="grid">${st.order1.map(id => cardHTML(id, st.hue1[id])).join("")}</div>`;
+    const grid = $("grid");
+    dealIn(grid);
+    grid.querySelectorAll(".card").forEach(c => {
+        const id = +c.dataset.id;
+        const markOn = on => {
+            c.classList.toggle("on", on);
+            c.setAttribute("aria-pressed", on ? "true" : "false");
+            c.querySelector(".mark").textContent = on ? "已選" : "";
+        };
+        markOn(st.picked.includes(id));
+        c.onclick = () => {
+            const i = st.picked.indexOf(id);
+            if (i >= 0) {
+                st.picked.splice(i, 1);
+                st.ranked = st.ranked.filter(x => x !== id);
+                markOn(false);
+            } else {
+                if (st.picked.length >= PICK1) return;
+                st.picked.push(id);
+                markOn(true);
+            }
+            save();
+            sync1();
+        };
+    });
+    function sync1() {
+        $("stageCount").innerHTML = `已選 <strong>${st.picked.length}</strong> / ${PICK1}`;
+        next.disabled = st.picked.length !== PICK1;
+    }
+    sync1();
+    next.onclick = () => {
+        if (st.picked.length !== PICK1) return;
+        st.screen = "s2";
+        // 名單沒變就沿用上次的排列和顏色，志願標記才不會跳位
+        const same = st.base2.length === st.picked.length && st.picked.every(id => st.base2.includes(id));
+        if (!same) {
+            st.order2 = shuffled(st.picked);
+            st.hue2 = hueMap(st.order2);
+            st.base2 = st.picked.slice();
+        }
+        render();
+    };
+}
+
+function renderS2() {
+    $("stageName").textContent = "第二階段・排出志願序";
+    $("backBtn").hidden = false;
+    armReset($("resetTop"));
+    const next = $("nextBtn");
+    next.textContent = "查看結果";
+    view.innerHTML = `
+        <p class="hint">照你想要的志願順序點卡片，志願 1 先點。點錯可以在下方調整或取消。</p>
+        <div class="grid" id="grid">${st.order2.map(id => cardHTML(id, st.hue2[id])).join("")}</div>
+        <div style="height:64px"></div>`;
+    const grid = $("grid");
+    dealIn(grid);
+    grid.querySelectorAll(".card").forEach(c => {
+        const id = +c.dataset.id;
+        c.onclick = () => {
+            const i = st.ranked.indexOf(id);
+            if (i >= 0) st.ranked.splice(i, 1);
+            else {
+                if (st.ranked.length >= PICK2) return;
+                st.ranked.push(id);
+            }
+            save();
+            sync2();
+        };
+    });
+    function sync2() {
+        grid.querySelectorAll(".card").forEach(c => {
+            const id = +c.dataset.id, i = st.ranked.indexOf(id);
+            c.classList.toggle("on", i >= 0);
+            c.setAttribute("aria-pressed", i >= 0 ? "true" : "false");
+            c.querySelector(".mark").textContent = i >= 0 ? "志願 " + (i + 1) : "";
+        });
+        $("stageCount").innerHTML = `已排 <strong>${st.ranked.length}</strong> / ${PICK2}`;
+        next.disabled = st.ranked.length !== PICK2;
+        renderTray(sync2);
+    }
+    sync2();
+    next.onclick = () => {
+        if (st.ranked.length !== PICK2) return;
+        st.screen = "result";
+        render();
+    };
+    $("backBtn").onclick = () => { st.screen = "s1"; render(); };
+}
+
+function renderTray(sync) {
+    const slots = [];
+    for (let i = 0; i < PICK2; i++) {
+        const id = st.ranked[i];
+        if (id === undefined) {
+            slots.push(`<span class="slot">志願 ${i + 1}</span>`);
+        } else {
+            const p = SENIORS[id];
+            slots.push(`<span class="slot full" style="--hue:${st.hue2[id]}">
+                <span class="no">${i + 1}</span><span class="t">${esc(p.core)}</span>
+                <button data-up="${i}" aria-label="志願 ${i + 1} 往前移" ${i === 0 ? "disabled" : ""}>↑</button>
+                <button data-del="${i}" aria-label="移除志願 ${i + 1}">✕</button>
+            </span>`);
+        }
+    }
+    $("trayIn").innerHTML = slots.join("");
+    $("trayIn").querySelectorAll("[data-up]").forEach(b => b.onclick = () => {
+        const i = +b.dataset.up;
+        [st.ranked[i - 1], st.ranked[i]] = [st.ranked[i], st.ranked[i - 1]];
+        save();
+        sync();
+    });
+    $("trayIn").querySelectorAll("[data-del]").forEach(b => b.onclick = () => {
+        st.ranked.splice(+b.dataset.del, 1);
+        save();
+        sync();
+    });
+}
+
+function renderResult() {
+    const slips = st.ranked.map((id, i) => `
+        <div class="slip" style="--hue:${st.hue2[id] || HUES[i]}">
+            <span class="rank disp">志願 ${i + 1}</span>
+            <span class="num"><small>編號</small>${SENIORS[id].no}</span>
+            <span class="meta">${esc(SENIORS[id].core)}${SENIORS[id].mbti ? "・" + esc(SENIORS[id].mbti) : ""}</span>
+        </div>`).join("");
+    const formBtn = FORM_URL ? `<a class="btn" href="${FORM_URL}" target="_blank" rel="noopener">前往表單</a>` : "";
+    view.innerHTML = `
+    <div class="result">
+        <h2 class="disp">你的志願序</h2>
+        <p class="sub">編號在這裡才揭曉，每個編號對應一位學長姐。</p>
+        ${slips}
+        <div class="remind">請回到 119 級學弟妹填寫區表單，<strong>依照上面的志願序</strong>選擇對應的編號送出，志願 1 填編號 ${SENIORS[st.ranked[0]].no}，依此類推。</div>
+        <div class="acts">
+            ${formBtn}
+            <button class="btn" id="copyBtn">複製志願序</button>
+            <button class="btn-ghost" id="editBtn">回上一步調整</button>
+            <button class="btn-ghost" id="resetBtn">重新開始</button>
+            <span class="copied" id="copied" hidden>已複製</span>
+        </div>
+    </div>`;
+    dealIn(view.querySelector(".result"), ".slip", 150);
+    $("copyBtn").onclick = () => {
+        const text = st.ranked.map((id, i) => `志願 ${i + 1}：編號 ${SENIORS[id].no}`).join("\n");
+        const tip = $("copied");
+        const done = () => {
+            tip.textContent = "已複製";
+            tip.hidden = false;
+            setTimeout(() => { tip.hidden = true; }, 2500);
+        };
+        const fail = () => {
+            tip.textContent = "複製失敗，請直接抄寫上面的編號";
+            tip.hidden = false;
+        };
+        const manual = () => {
+            const ta = document.createElement("textarea");
+            ta.value = text;
+            ta.setAttribute("readonly", "");
+            ta.style.position = "fixed";
+            ta.style.left = "-9999px";
+            document.body.appendChild(ta);
+            ta.select();
+            let ok = false;
+            try { ok = document.execCommand("copy"); } catch (e) {}
+            ta.remove();
+            ok ? done() : fail();
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done).catch(manual);
+        else manual();
+    };
+    $("editBtn").onclick = () => { st.screen = "s2"; render(); };
+    armReset($("resetBtn"));
+}
+
+if (!SENIORS.length) {
+    view.innerHTML = `
+    <div class="intro">
+        <p class="eyebrow">NYCU ARETE HONORS PROGRAM</p>
+        <h1 class="disp">資料尚未載入</h1>
+        <p class="lead" style="margin-top:16px">學長姐的介紹資料還沒設定完成，請稍後再進來一次，或聯絡活動負責人。</p>
+    </div>`;
+} else {
+    render();
+}
+</script>
+</body>
+</html>

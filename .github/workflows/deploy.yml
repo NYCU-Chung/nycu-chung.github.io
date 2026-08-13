@@ -37,6 +37,12 @@ jobs:
           };
           SCRIPT
 
+      - name: Inject Baichuan seniors data
+        run: |
+          cat > baichuan/config.js << 'SCRIPT'
+          window.BAICHUAN_SENIORS = ${{ secrets.BAICHUAN_SENIORS }};
+          SCRIPT
+
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
